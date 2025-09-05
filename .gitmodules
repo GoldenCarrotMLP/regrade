@@ -1,6 +1,6 @@
 [submodule "apps/regrade"]
 	path = apps/regrade
-	url = https://github.com/GoldenCarrotMLP/regrade
+	url = https://github.com/GoldenCarrotMLP/regrade-web
 [submodule "apps/studio"]
 	path = apps/studio
 	url = https://github.com/GoldenCarrotMLP/supabase
