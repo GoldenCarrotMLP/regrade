@@ -1,3 +1,4 @@
 [submodule "apps/regrade"]
 	path = apps/regrade
 	url = https://github.com/GoldenCarrotMLP/regrade-web
+	branch = main
