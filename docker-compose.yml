@@ -12,23 +12,27 @@ services:
   web:
     container_name: regrade-web
     build:
-      context: ./apps/web
+      context: ./apps/regrade
       # CHANGE THIS: Now that the context is the app folder, the Dockerfile is at the root
       dockerfile: Dockerfile
       # To run in development mode, uncomment the following line:
-      target: dev
+      #target: dev
     restart: unless-stopped
     ports:
       # For production, Next.js standalone runs on port 3000
       # For development, your `dev` script runs on port 3001
-      - "3001:3001" # For dev mode (npm run dev)
+      - "3000:3000" # For dev mode (npm run dev)
       #- "3000:3000" # For production
+    
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       # You can add your NEXT_PUBLIC_ variables here
       # These will override what's in your .env file for the container
       NEXT_PUBLIC_SUPABASE_URL: ${API_EXTERNAL_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+      NEXT_PUBLIC_DEV_ONLY_SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+
       # It's better to pass other secrets via the environment section
       # rather than copying the .env file into the image.
     depends_on:
