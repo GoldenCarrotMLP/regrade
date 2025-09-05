@@ -7,6 +7,7 @@
 # - Deploys containers and restores the database.
 # ==============================================================================
 
+# Exit immediately if a command exits with a non-zero status.
 set -e
 
 # --- Configuration ---
@@ -31,7 +32,8 @@ function fetch_latest_backup_from_github() {
   gh workflow run $WORKFLOW_NAME --ref main
   
   # Give the API a moment to create the run
-  sleep 5 
+  echo "Waiting for the workflow run to appear on GitHub..."
+  sleep 8
   
   # Get the ID of the most recent run for this workflow
   RUN_ID=$(gh run list --workflow="$WORKFLOW_NAME" -L 1 --json databaseId -q '.[0].databaseId')
@@ -68,7 +70,7 @@ echo "🚀 Starting Supabase project setup..."
 # 1. Prerequisite Checks & GitHub Login
 echo -e "\n1. Checking prerequisites..."
 check_command "docker" || { echo "Error: docker not found."; exit 1; }
-check_command "docker compose" || { echo "Error: docker-compose not found."; exit 1; }
+check_command "docker compose" || { echo "Error: docker-compose not found. Please install it first."; exit 1; }
 check_command "nginx" || { echo "Error: nginx not found."; exit 1; }
 check_command "gh" || { echo "Error: GitHub CLI 'gh' not found. Please install it first."; exit 1; }
 check_command "jq" || { echo "Error: 'jq' not found. Please install it (e.g., sudo apt install jq)."; exit 1; }
@@ -81,20 +83,53 @@ echo "✅ All required tools are present and you are logged into GitHub."
 
 
 # 2. Setup Environment File
-# (Code from previous version - unchanged)
 echo -e "\n2. Checking for .env file..."
 if [ ! -f ".env" ]; then
-  cp .env.example .env
-  echo "✅ .env file created from .env.example."
-  echo "‼️ IMPORTANT: Please review the .env file and fill in any required values."
+  if [ -f ".env.example" ]; then
+    cp .env.example .env
+    echo "✅ .env file created from .env.example."
+    echo "‼️ IMPORTANT: Please review the .env file and fill in any required values."
+  else
+    echo "Error: .env.example not found. Cannot create .env file."
+    exit 1
+  fi
+else
+    echo "✅ .env file already exists. Skipping creation."
 fi
 
 # 3. Interactive Nginx Setup
-# (Code from previous version - unchanged, uses manual certbot step)
 echo -e "\n3. Nginx Configuration"
 read -p "Do you want to configure Nginx automatically? (y/n): " nginx_choice
 if [[ "${nginx_choice,,}" == "y" ]]; then
-  # ... (Nginx setup logic from before) ...
+  if [ -d "config/nginx/sites-available" ]; then
+    echo "Configuring Nginx... This will require sudo."
+    
+    # Copy all site configuration files.
+    sudo cp -r ./config/nginx/sites-available/* /etc/nginx/sites-available/
+    
+    # Optional: Copy the main nginx.conf if it exists in your repo
+    if [ -f "config/nginx/nginx.conf" ]; then
+      sudo cp ./config/nginx/nginx.conf /etc/nginx/nginx.conf
+    fi
+
+    # Loop through all copied site configs and create symlinks to enable them
+    echo "Enabling all copied sites..."
+    for site_file in /etc/nginx/sites-available/*; do
+      filename=$(basename "$site_file")
+      sudo ln -sf "/etc/nginx/sites-available/$filename" "/etc/nginx/sites-enabled/$filename"
+    done
+    
+    # Reload Nginx. A test is skipped as it may fail without SSL certificates.
+    echo "Reloading Nginx service..."
+    sudo systemctl reload nginx
+    
+    echo "✅ Nginx has been configured and reloaded."
+    echo "‼️ SSL certificates will need to be generated in a final step."
+  else
+    echo "Warning: Directory 'config/nginx/sites-available' not found. Skipping Nginx setup."
+  fi
+else
+  echo "Skipping Nginx configuration."
 fi
 
 # 4. Fetch the Database Backup
@@ -108,7 +143,10 @@ docker-compose up -d db
 
 # 6. Wait for the database to be healthy
 echo -e "\n6. Waiting for the database to accept connections..."
-until docker exec "$DB_CONTAINER" pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q; do sleep 2; done
+until docker exec "$DB_CONTAINER" pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" -q; do
+  echo "Database is unavailable - sleeping for 2 seconds..."
+  sleep 2
+done
 echo "✅ Database is ready."
 
 # 7. Restore the database
