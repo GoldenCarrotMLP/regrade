@@ -25,7 +25,7 @@ DATE_DIR=$(date +%Y-%m-%d)
 TIMESTAMP=$(date +"%H-%M-%p")
 BACKUP_FILENAME="supabase-${POSTGRES_DB}-backup-${DATE_DIR}_${TIMESTAMP}.sql.gz"
 
-LOCAL_BACKUP_DIR="/home/anderson/supabase-project"
+LOCAL_BACKUP_DIR="/home/anderson/regrade"
 LOCAL_BACKUP_PATH="${LOCAL_BACKUP_DIR}/backup/${BACKUP_FILENAME}"
 RCLONE_FULL_PATH="${RCLONE_REMOTE}:${RCLONE_BASE_DIR}/${DATE_DIR}"
 
@@ -38,7 +38,7 @@ mkdir -p "${LOCAL_BACKUP_DIR}/backup"
 
 # 3. Create the backup file (single DB)
 echo "Creating database dump for '${POSTGRES_DB}'..."
-sudo docker exec -t "${DOCKER_CONTAINER}" \
+sudo docker exec "${DOCKER_CONTAINER}" \
   pg_dump -v -U "${POSTGRES_USER}" "${POSTGRES_DB}" \
   | gzip > "${LOCAL_BACKUP_PATH}"
 
