@@ -18,20 +18,24 @@ jobs:
         env:
           # The rclone config must be stored as a Base64 encoded string
           RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
+          # <-- ADD THIS LINE: Define the base directory for clarity
+          RCLONE_BASE_DIR: "SupabaseServerBackups"
         run: |
           # Decode the rclone config from the secret
           echo $RCLONE_CONFIG_BASE64 | base64 --decode > $HOME/rclone.conf
           
-          # Find and download the latest backup file
-          LATEST_BACKUP_PATH=$(rclone --config $HOME/rclone.conf lsf --max-depth 3 -R --files-only "dropbox:SupabaseServerBackups" | sort -r | head -n 1)
+          # Find the latest backup file's RELATIVE path
+          LATEST_BACKUP_RELATIVE_PATH=$(rclone --config $HOME/rclone.conf lsf --max-depth 3 -R --files-only "dropbox:${RCLONE_BASE_DIR}" | sort -r | head -n 1)
           
-          if [ -z "$LATEST_BACKUP_PATH" ]; then
+          if [ -z "$LATEST_BACKUP_RELATIVE_PATH" ]; then
             echo "Error: No backup files found."
             exit 1
           fi
           
-          echo "Downloading: $LATEST_BACKUP_PATH"
-          rclone --config $HOME/rclone.conf copyto "dropbox:${LATEST_BACKUP_PATH}" ./latest_backup.sql.gz
+          # <-- CORRECTED THIS SECTION: Construct the FULL path
+          FULL_BACKUP_PATH="${RCLONE_BASE_DIR}/${LATEST_BACKUP_RELATIVE_PATH}"
+          echo "Downloading: $FULL_BACKUP_PATH"
+          rclone --config $HOME/rclone.conf copyto "dropbox:${FULL_BACKUP_PATH}" ./latest_backup.sql.gz
 
       - name: Upload backup as a workflow artifact
         uses: actions/upload-artifact@v4
