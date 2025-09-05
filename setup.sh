@@ -1,9 +1,11 @@
 #!/bin/bash
 
 # ==============================================================================
-# Project Setup & Restore Script
-# Prepares a new environment by installing dependencies (.env, Nginx, Docker),
-# building containers, and restoring the latest database backup.
+# Project Setup & Restore Script (v4)
+# - Interactively configures Nginx.
+# - Automatically fetches secrets from GitHub.
+# - Installs dependencies (Docker Compose, gh, jq).
+# - Deploys containers and restores the latest database backup.
 # ==============================================================================
 
 # Exit immediately if a command exits with a non-zero status.
@@ -15,59 +17,32 @@ POSTGRES_USER="postgres"
 POSTGRES_DB="postgres"
 RCLONE_REMOTE="dropbox"
 RCLONE_BASE_DIR="SupabaseServerBackups"
+GITHUB_REPO_URL="GoldenCarrotMLP/regrade" # IMPORTANT: Set this to your "owner/repo"
 
 TEMP_BACKUP_DIR="./temp_backup"
 
 # --- Helper Functions ---
 function check_command() {
   if ! command -v $1 &> /dev/null; then
-    echo "Error: Required command '$1' is not installed. Please install it before running this script."
-    exit 1
-  fi
-}
-
-function install_docker_compose() {
-  echo "Command 'docker-compose' not found. Attempting to install it as a Docker plugin..."
-  echo "This will require sudo privileges."
-
-  # Check for curl
-  if ! command -v curl &> /dev/null; then
-    echo "Error: 'curl' is required to download Docker Compose. Please install curl first (e.g., sudo apt-get install curl)."
-    exit 1
-  fi
-  
-  # Find the latest version and construct the download URL for the system's architecture
-  LATEST_COMPOSE_URL=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep "browser_download_url" | grep "$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m)" | cut -d '"' -f 4)
-  
-  if [ -z "$LATEST_COMPOSE_URL" ]; then
-    echo "Error: Could not automatically determine the download URL for Docker Compose."
-    echo "Please install it manually by following the official Docker documentation."
-    exit 1
-  fi
-
-  echo "Downloading Docker Compose from: $LATEST_COMPOSE_URL"
-  
-  # Destination for Docker CLI plugins
-  DOCKER_PLUGINS_DIR="/usr/local/lib/docker/cli-plugins"
-  
-  # Create the directory if it doesn't exist
-  sudo mkdir -p "$DOCKER_PLUGINS_DIR"
-  
-  # Download the binary to the correct location
-  sudo curl -SL "$LATEST_COMPOSE_URL" -o "$DOCKER_PLUGINS_DIR/docker-compose"
-  
-  # Make the binary executable
-  sudo chmod +x "$DOCKER_PLUGINS_DIR/docker-compose"
-  
-  # Verify installation. The 'docker compose' (with a space) command is the new standard.
-  if docker compose version &> /dev/null; then
-    echo "✅ Docker Compose installed successfully."
+    return 1
   else
-    echo "Error: Docker Compose installation failed. Please try installing it manually."
-    exit 1
+    return 0
   fi
 }
 
+function install_gh_cli() {
+  echo "GitHub CLI 'gh' not found. Attempting to install..."
+  if check_command "apt-get"; then
+    curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+    sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+    sudo apt update
+    sudo apt install -y gh
+  else
+    echo "Could not determine package manager. Please install the GitHub CLI 'gh' manually."
+    exit 1
+  fi
+}
 
 # --- Script Execution ---
 
@@ -75,20 +50,25 @@ echo "🚀 Starting Supabase project setup..."
 
 # 1. Check for Prerequisites
 echo -e "\n1. Checking for required tools..."
-check_command "docker"
-check_command "rclone"
-check_command "nginx"
+# Simple checks
+check_command "docker" || { echo "Error: docker is not installed."; exit 1; }
+check_command "nginx" || { echo "Error: nginx is not installed."; exit 1; }
+check_command "rclone" || { echo "Error: rclone is not installed."; exit 1; }
 
-# Special handling for docker-compose: install if not found
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-  install_docker_compose
-else
-  echo "✅ docker-compose is already installed."
+# Install gh if missing
+check_command "gh" || install_gh_cli
+# Install jq if missing (needed for parsing API responses)
+check_command "jq" || { echo "jq not found, installing..."; sudo apt-get install -y jq; }
+
+# Install Docker Compose if missing
+if ! docker compose version &> /dev/null; then
+    echo "Docker Compose not found. Please install it as a Docker plugin first."
+    exit 1
 fi
 echo "✅ All required tools are present."
 
-
 # 2. Setup Environment File
+# (Code from previous version - unchanged)
 echo -e "\n2. Checking for .env file..."
 if [ ! -f ".env" ]; then
   echo "No .env file found. Creating one from .env.example..."
@@ -104,57 +84,73 @@ else
   echo "✅ .env file already exists. Skipping creation."
 fi
 
-# In setup.sh, find the "Setup Nginx Configuration" block (Step 3)
-# and replace it with this:
+# 3. Interactive Nginx Setup
+echo -e "\n3. Nginx Configuration"
+read -p "Do you want to configure Nginx automatically? (y/n): " nginx_choice
+if [[ "${nginx_choice,,}" == "y" ]]; then
+  if [ -d "config/nginx/sites-available" ]; then
+    echo "Configuring Nginx... This will require sudo."
+    
+    # Temporarily modify configs to allow HTTP validation
+    # This prevents the "certificate not found" error on a fresh install
+    echo "Temporarily modifying configs to allow HTTP validation..."
+    sudo find ./config/nginx/sites-available -type f -exec sed -i -r 's/(^\s*listen\s+443\s+ssl.*)/#\1/g' {} +
+    sudo find ./config/nginx/sites-available -type f -exec sed -i -r 's/(^\s*ssl_certificate.*)/#\1/g' {} +
 
-# 3. Setup Nginx Configuration
-echo -e "\n3. Setting up Nginx configuration..."
-if [ -d "config/nginx/sites-available" ]; then
-  echo "Found Nginx 'sites-available' directory. This will require sudo."
-  
-  # Copy all site configuration files.
-  sudo cp -r ./config/nginx/sites-available/* /etc/nginx/sites-available/
-  
-  # Optional: Copy the main nginx.conf if it exists in your repo
-  if [ -f "config/nginx/nginx.conf" ]; then
-    sudo cp ./config/nginx/nginx.conf /etc/nginx/nginx.conf
+    # Copy all site configuration files.
+    sudo cp -r ./config/nginx/sites-available/* /etc/nginx/sites-available/
+    
+    # Optional: Copy the main nginx.conf
+    if [ -f "config/nginx/nginx.conf" ]; then
+      sudo cp ./config/nginx/nginx.conf /etc/nginx/nginx.conf
+    fi
+
+    # Enable all sites
+    for site_file in /etc/nginx/sites-available/*; do
+      filename=$(basename "$site_file")
+      sudo ln -sf "/etc/nginx/sites-available/$filename" "/etc/nginx/sites-enabled/$filename"
+    done
+    
+    # Test and reload Nginx with the temporary (HTTP-only) config
+    echo "Testing and reloading Nginx with temporary config..."
+    sudo nginx -t && sudo systemctl reload nginx
+    
+    echo "✅ Nginx is running. You should now generate SSL certificates."
+    echo "Run 'sudo certbot --nginx' after the script finishes to secure your sites."
+  else
+    echo "Warning: Directory 'config/nginx/sites-available' not found. Skipping Nginx setup."
   fi
-
-  # Loop through all copied site configs and create symlinks to enable them
-  echo "Enabling all copied sites..."
-  for site_file in /etc/nginx/sites-available/*; do
-    filename=$(basename "$site_file")
-    echo "  -> Enabling $filename"
-    sudo ln -sf "/etc/nginx/sites-available/$filename" "/etc/nginx/sites-enabled/$filename"
-  done
-  
-  # We are SKIPPING the nginx -t and reload commands because they will fail without SSL certs.
-  echo "✅ Nginx configuration files have been copied."
-  echo "‼️ SSL certificates will be generated in a final step after all services are running."
 else
-  echo "Warning: Directory 'config/nginx/sites-available' not found. Skipping Nginx setup."
+  echo "Skipping Nginx configuration."
 fi
 
-
-# 4. Configure Rclone
+# 4. Configure Rclone via GitHub
 echo -e "\n4. Configuring rclone..."
 RCLONE_CONFIG_PATH="$PWD/temp_rclone.conf"
 
-if [ -z "$RCLONE_CONFIG" ]; then
-    echo "RCLONE_CONFIG environment variable not set."
-    echo "Please go to your GitHub repository -> Settings -> Secrets -> Actions."
-    echo "Copy the content of the 'RCLONE_CONFIG' secret and paste it here, then press Enter:"
-    read -r GITHUB_SECRET
-    if [ -z "$GITHUB_SECRET" ]; then echo "Error: No secret pasted. Aborting."; exit 1; fi
-    echo "$GITHUB_SECRET" > "$RCLONE_CONFIG_PATH"
-else
-    echo "Found RCLONE_CONFIG environment variable."
-    echo "$RCLONE_CONFIG" > "$RCLONE_CONFIG_PATH"
+# Check auth status. If not logged in, prompt the user.
+if ! gh auth status &> /dev/null; then
+  echo "You are not logged into the GitHub CLI."
+  echo "A browser window will open for you to authenticate. This is a one-time setup."
+  gh auth login
 fi
-echo "✅ rclone configuration created temporarily."
+
+echo "Fetching rclone configuration from GitHub repository secrets..."
+# Use gh api to get the secret, jq to parse the JSON and get the 'body'
+RCLONE_SECRET_BODY=$(gh api repos/$GITHUB_REPO_URL/actions/secrets/RCLONE_CONFIG | jq -r .body)
+
+if [ -z "$RCLONE_SECRET_BODY" ]; then
+    echo "Error: Could not fetch 'RCLONE_CONFIG' secret from GitHub."
+    echo "Please ensure you are logged in with 'gh auth login' and have access to the repo."
+    exit 1
+fi
+
+echo "$RCLONE_SECRET_BODY" > "$RCLONE_CONFIG_PATH"
+echo "✅ rclone configuration fetched and created temporarily."
 
 # 5. Download the Latest Backup
 echo -e "\n5. Finding and downloading the latest database backup..."
+# ... (rest of the script is the same)
 mkdir -p "$TEMP_BACKUP_DIR"
 LATEST_BACKUP_PATH=$(rclone --config "$RCLONE_CONFIG_PATH" lsf --max-depth 3 -R --files-only "${RCLONE_REMOTE}:${RCLONE_BASE_DIR}" | sort -r | head -n 1)
 
@@ -199,16 +195,4 @@ rm -rf "$TEMP_BACKUP_DIR" "$RCLONE_CONFIG_PATH"
 echo "✅ Cleanup complete."
 
 echo -e "\n🎉 Your Supabase environment is up and running!"
-echo "Check your Nginx config for the public URL."
-
-# 11. Final Manual Step: Generate SSL Certificates
-echo -e "\n11. FINAL STEP: GENERATE SSL CERTIFICATES"
-echo "----------------------------------------------------"
-echo "Your services are running, but Nginx is not yet serving SSL traffic."
-echo "To complete the setup, please run the following command:"
-echo ""
-echo "  sudo certbot --nginx"
-echo ""
-echo "Certbot will automatically detect your domains from the Nginx config, obtain"
-echo "certificates, and reload Nginx for you."
-echo "----------------------------------------------------"
+echo "If you configured Nginx, remember to run 'sudo certbot --nginx' to enable SSL."
