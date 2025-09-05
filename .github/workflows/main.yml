@@ -1,0 +1,41 @@
+name: Create Latest Backup Artifact
+
+on:
+  # This allows the setup.sh script (or you) to manually trigger the workflow
+  workflow_dispatch:
+
+jobs:
+  create-artifact:
+    name: Download Backup and Create Artifact
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Install rclone
+        run: sudo curl https://rclone.org/install.sh | sudo bash
+
+      - name: Download Latest Backup from Dropbox
+        id: download_backup
+        env:
+          # The rclone config must be stored as a Base64 encoded string
+          RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
+        run: |
+          # Decode the rclone config from the secret
+          echo $RCLONE_CONFIG_BASE64 | base64 --decode > $HOME/rclone.conf
+          
+          # Find and download the latest backup file
+          LATEST_BACKUP_PATH=$(rclone --config $HOME/rclone.conf lsf --max-depth 3 -R --files-only "dropbox:SupabaseServerBackups" | sort -r | head -n 1)
+          
+          if [ -z "$LATEST_BACKUP_PATH" ]; then
+            echo "Error: No backup files found."
+            exit 1
+          fi
+          
+          echo "Downloading: $LATEST_BACKUP_PATH"
+          rclone --config $HOME/rclone.conf copyto "dropbox:${LATEST_BACKUP_PATH}" ./latest_backup.sql.gz
+
+      - name: Upload backup as a workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: latest-supabase-backup # The name the script will use to find the artifact
+          path: ./latest_backup.sql.gz
+          retention-days: 1 # The artifact will be deleted after 1 day
