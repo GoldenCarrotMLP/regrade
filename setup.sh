@@ -70,7 +70,7 @@ echo "🚀 Starting Supabase project setup..."
 # 1. Prerequisite Checks & GitHub Login
 echo -e "\n1. Checking prerequisites..."
 check_command "docker" || { echo "Error: docker not found."; exit 1; }
-check_command "docker compose" || { echo "Error: docker-compose not found. Please install it first."; exit 1; }
+check_command "docker compose" || { echo "Error: docker compose not found. Please install it first."; exit 1; }
 check_command "nginx" || { echo "Error: nginx not found."; exit 1; }
 check_command "gh" || { echo "Error: GitHub CLI 'gh' not found. Please install it first."; exit 1; }
 check_command "jq" || { echo "Error: 'jq' not found. Please install it (e.g., sudo apt install jq)."; exit 1; }
@@ -139,7 +139,7 @@ LOCAL_BACKUP_FILE="$TEMP_DIR/latest_backup.sql.gz"
 
 # 5. Build containers and start the database
 echo -e "\n5. Building images and starting the database container..."
-docker-compose up -d db
+docker compose up -d db
 
 # 6. Wait for the database to be healthy
 echo -e "\n6. Waiting for the database to accept connections..."
@@ -156,7 +156,7 @@ echo "✅ Database restored successfully."
 
 # 8. Start all remaining services
 echo -e "\n8. Starting all remaining project services..."
-docker-compose up -d
+docker compose up -d
 
 # 9. Cleanup
 echo -e "\n9. Cleaning up temporary files..."
