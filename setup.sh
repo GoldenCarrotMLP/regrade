@@ -104,35 +104,37 @@ else
   echo "✅ .env file already exists. Skipping creation."
 fi
 
+# In setup.sh, find the "Setup Nginx Configuration" block (Step 3)
+# and replace it with this:
+
 # 3. Setup Nginx Configuration
 echo -e "\n3. Setting up Nginx configuration..."
 if [ -d "config/nginx/sites-available" ]; then
   echo "Found Nginx 'sites-available' directory. This will require sudo."
   
+  # Copy all site configuration files.
   sudo cp -r ./config/nginx/sites-available/* /etc/nginx/sites-available/
   
+  # Optional: Copy the main nginx.conf if it exists in your repo
   if [ -f "config/nginx/nginx.conf" ]; then
-    echo "Found main nginx.conf, copying to /etc/nginx/nginx.conf"
     sudo cp ./config/nginx/nginx.conf /etc/nginx/nginx.conf
   fi
 
+  # Loop through all copied site configs and create symlinks to enable them
   echo "Enabling all copied sites..."
   for site_file in /etc/nginx/sites-available/*; do
     filename=$(basename "$site_file")
     echo "  -> Enabling $filename"
     sudo ln -sf "/etc/nginx/sites-available/$filename" "/etc/nginx/sites-enabled/$filename"
   done
-
-  echo "Testing Nginx configuration..."
-  sudo nginx -t
   
-  echo "Reloading Nginx service..."
-  sudo systemctl reload nginx
-  
-  echo "✅ Nginx has been configured and reloaded successfully."
+  # We are SKIPPING the nginx -t and reload commands because they will fail without SSL certs.
+  echo "✅ Nginx configuration files have been copied."
+  echo "‼️ SSL certificates will be generated in a final step after all services are running."
 else
   echo "Warning: Directory 'config/nginx/sites-available' not found. Skipping Nginx setup."
 fi
+
 
 # 4. Configure Rclone
 echo -e "\n4. Configuring rclone..."
@@ -198,3 +200,15 @@ echo "✅ Cleanup complete."
 
 echo -e "\n🎉 Your Supabase environment is up and running!"
 echo "Check your Nginx config for the public URL."
+
+# 11. Final Manual Step: Generate SSL Certificates
+echo -e "\n11. FINAL STEP: GENERATE SSL CERTIFICATES"
+echo "----------------------------------------------------"
+echo "Your services are running, but Nginx is not yet serving SSL traffic."
+echo "To complete the setup, please run the following command:"
+echo ""
+echo "  sudo certbot --nginx"
+echo ""
+echo "Certbot will automatically detect your domains from the Nginx config, obtain"
+echo "certificates, and reload Nginx for you."
+echo "----------------------------------------------------"
