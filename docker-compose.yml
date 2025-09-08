@@ -6,8 +6,6 @@
 #   Reset everything:  ./reset.sha
 
 name: supabase
-
-
 services:
 
   web:
