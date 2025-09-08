@@ -1,3 +1,4 @@
 studio.tar
 volumes/db/data/
 .env
+backup/cron.log
