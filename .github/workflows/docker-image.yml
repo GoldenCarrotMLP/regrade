@@ -1,0 +1,51 @@
+# Use a slim Node.js image as the base
+FROM node:22-slim AS base
+
+# Install necessary packages
+RUN apt-get update -qq && \
+  apt-get install -y --no-install-recommends \
+  build-essential && \
+  rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# --- Development Stage ---
+# This stage installs all dependencies and is used for running the dev server.
+FROM base AS deps
+COPY package.json package-lock.json ./
+RUN npm install
+
+# The 'dev' stage includes source code and all node_modules
+FROM deps AS dev
+COPY . .
+# The default command to run when starting the container in dev mode
+CMD ["npm", "run", "dev"]
+
+# --- Build Stage ---
+# This stage builds the Next.js application for production.
+FROM deps AS builder
+COPY . .
+
+# The 'npm run build' command is taken from your package.json
+RUN npm run build
+
+# --- Production Stage ---
+# This is the final, optimized image for production.
+FROM base AS production
+
+# Set the environment to production
+ENV NODE_ENV=production
+
+# Copy the standalone Next.js server from the builder stage
+COPY --from=builder /app/.next/standalone ./
+# Copy the static assets
+COPY --from=builder /app/.next/static ./.next/static
+# Copy the public folder
+COPY --from=builder /app/public ./public
+
+# Expose the port your Next.js app will run on in production
+EXPOSE 3000
+
+# The command to start the production server
+# This runs the server.js file located in the .next/standalone directory
+CMD ["node", "server.js"]
