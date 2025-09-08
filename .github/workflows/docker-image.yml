@@ -1,51 +1,42 @@
-# Use a slim Node.js image as the base
-FROM node:22-slim AS base
+name: Build and Push to Docker Hub
 
-# Install necessary packages
-RUN apt-get update -qq && \
-  apt-get install -y --no-install-recommends \
-  build-essential && \
-  rm -rf /var/lib/apt/lists/*
+# This action triggers on every push to the 'main' branch
+on:
+  push:
+    branches:
+      - main
 
-WORKDIR /app
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest # Use a standard Linux runner
 
-# --- Development Stage ---
-# This stage installs all dependencies and is used for running the dev server.
-FROM base AS deps
-COPY package.json package-lock.json ./
-RUN npm install
+    steps:
+      # 1. Check out your code from the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-# The 'dev' stage includes source code and all node_modules
-FROM deps AS dev
-COPY . .
-# The default command to run when starting the container in dev mode
-CMD ["npm", "run", "dev"]
+      # 2. Log in to Docker Hub using the secrets we created
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-# --- Build Stage ---
-# This stage builds the Next.js application for production.
-FROM deps AS builder
-COPY . .
+      # 3. This clever action creates metadata and tags for your image
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # This will create tags like:
+          # - your-dockerhub-username/regrade-web:latest (for the main branch)
+          # - your-dockerhub-username/regrade-web:sha-a1b2c3d (unique for each commit)
+          images: ${{ secrets.DOCKERHUB_USERNAME }}/regrade-web # IMPORTANT: Change 'regrade-web' to your repo name
 
-# The 'npm run build' command is taken from your package.json
-RUN npm run build
-
-# --- Production Stage ---
-# This is the final, optimized image for production.
-FROM base AS production
-
-# Set the environment to production
-ENV NODE_ENV=production
-
-# Copy the standalone Next.js server from the builder stage
-COPY --from=builder /app/.next/standalone ./
-# Copy the static assets
-COPY --from=builder /app/.next/static ./.next/static
-# Copy the public folder
-COPY --from=builder /app/public ./public
-
-# Expose the port your Next.js app will run on in production
-EXPOSE 3000
-
-# The command to start the production server
-# This runs the server.js file located in the .next/standalone directory
-CMD ["node", "server.js"]
+      # 4. Build the image and push it to Docker Hub
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./ # The path to your web app's directory (with the Dockerfile)
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
