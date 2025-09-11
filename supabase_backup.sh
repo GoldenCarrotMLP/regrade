@@ -1,14 +1,13 @@
 #!/bin/bash
 
 # ==============================================================================
-# Supabase Self-Hosted PostgreSQL Backup Script
-# Single-database backup using pg_dump instead of pg_dumpall
+# Supabase Self-Hosted PostgreSQL Full Cluster Backup Script
+# Uses pg_dumpall to capture all databases, roles, and globals
 # ==============================================================================
 
 # --- Configuration Variables ---
 DOCKER_CONTAINER="supabase-db"
 POSTGRES_USER="postgres"
-POSTGRES_DB="postgres"   # <-- change if your app uses a different DB
 RCLONE_REMOTE="dropbox"
 RCLONE_BASE_DIR="SupabaseServerBackups"
 
@@ -23,23 +22,23 @@ BACKUP_AGE_TO_KEEP="7d"
 # 1. Generate timestamp and file paths
 DATE_DIR=$(date +%Y-%m-%d)
 TIMESTAMP=$(date +"%H-%M-%p")
-BACKUP_FILENAME="supabase-${POSTGRES_DB}-backup-${DATE_DIR}_${TIMESTAMP}.sql.gz"
+BACKUP_FILENAME="supabase-fulldump-${DATE_DIR}_${TIMESTAMP}.sql.gz"
 
 LOCAL_BACKUP_DIR="/home/anderson/regrade"
 LOCAL_BACKUP_PATH="${LOCAL_BACKUP_DIR}/backup/${BACKUP_FILENAME}"
 RCLONE_FULL_PATH="${RCLONE_REMOTE}:${RCLONE_BASE_DIR}/${DATE_DIR}"
 
-echo "Starting Supabase database backup..."
+echo "Starting Supabase FULL cluster backup..."
 echo "Local backup file: ${LOCAL_BACKUP_PATH}"
 echo "Remote destination: ${RCLONE_FULL_PATH}"
 
 # 2. Ensure local backup directory exists
 mkdir -p "${LOCAL_BACKUP_DIR}/backup"
 
-# 3. Create the backup file (single DB)
-echo "Creating database dump for '${POSTGRES_DB}'..."
+# 3. Create the full cluster dump
+echo "Creating full cluster dump..."
 sudo docker exec "${DOCKER_CONTAINER}" \
-  pg_dump -v -U "${POSTGRES_USER}" "${POSTGRES_DB}" \
+  pg_dumpall -v -U "${POSTGRES_USER}" \
   | gzip > "${LOCAL_BACKUP_PATH}"
 
 if [ $? -eq 0 ]; then
@@ -69,4 +68,4 @@ rclone rmdirs "${RCLONE_REMOTE}:${RCLONE_BASE_DIR}"
 rm "${LOCAL_BACKUP_PATH}"
 echo "Local temporary file removed."
 
-echo "Backup, upload, and cleanup process complete."
+echo "Full backup, upload, and cleanup process complete."
