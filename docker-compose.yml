@@ -41,7 +41,7 @@ services:
     container_name: supabase-studio
     #image: supabase/studio:latest
     build:
-      context: ./
+      context: ../supabase
       dockerfile: apps/studio/Dockerfile
       #target: dev 
     #command: pnpm dev:studio

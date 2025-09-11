@@ -6,7 +6,7 @@ echo "Tagging version: $GIT_HASH"
 
 # 3. Tag the image for release
 docker tag supabase-web  tuplasma/regrade-web:$GIT_HASH
-docker tag regrade-web tuplasma/regrade-web:latest
+docker tag supabase-web tuplasma/regrade-web:latest
 
 # 4. Push to Docker Hub
 docker push tuplasma/regrade-web:$GIT_HASH

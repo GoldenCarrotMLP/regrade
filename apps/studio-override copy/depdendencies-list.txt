@@ -1,0 +1,5 @@
+# Runtime dependencies (latest versions)
+pnpm add @ai-sdk/google configcat-js jsonwebtoken --filter studio
+
+# Dev dependency (latest version)
+pnpm add -D @types/jsonwebtoken --filter studio
