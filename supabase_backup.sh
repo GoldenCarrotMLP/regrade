@@ -15,7 +15,7 @@ RCLONE_BASE_DIR="SupabaseServerBackups"
 export RCLONE_CONFIG="/root/.config/rclone/rclone.conf"
 
 # Age of backups to keep
-BACKUP_AGE_TO_KEEP="7d"
+BACKUP_AGE_TO_KEEP="360d"
 
 # --- Script Execution ---
 
