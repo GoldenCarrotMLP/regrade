@@ -10,6 +10,9 @@ services:
 
   web:
     container_name: regrade-web
+    
+    #image: tuplasma/regrade-web:6626134
+
     build:
       context: ./apps/regrade
       # CHANGE THIS: Now that the context is the app folder, the Dockerfile is at the root
