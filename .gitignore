@@ -1,4 +1,9 @@
 studio.tar
 volumes/db/data/
+volumes/db/data.*
 .env
 backup/cron.log
+dns-capture.log
+dns-summary.log
+dns-raw.log
+unique-base-domains.txt

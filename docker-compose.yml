@@ -43,12 +43,12 @@ services:
 
   studio:
     container_name: supabase-studio
-    #image: supabase/studio:latest
-    build:
-      context: ../supabase
-      dockerfile: apps/studio/Dockerfile
-      #target: dev 
-    #command: pnpm dev:studio
+    image: studio-stable:latest
+    #build:
+  #    context: ../supabase
+  #    dockerfile: apps/studio/Dockerfile
+  #    target: dev 
+  #  command: pnpm dev:studio
     restart: unless-stopped
     healthcheck:
       test:
