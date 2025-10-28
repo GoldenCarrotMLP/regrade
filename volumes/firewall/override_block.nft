@@ -1,0 +1,7 @@
+set override_block {
+    type ipv4_addr
+    flags interval
+    elements = {
+        192.168.1.242/32
+    }
+}
