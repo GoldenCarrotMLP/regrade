@@ -2,12 +2,16 @@
 FROM golang:1.24 AS builder
 WORKDIR /app
 
+# Copy all source code (including go.mod if present)
 COPY . .
 
+# Initialize module if missing
 RUN [ ! -f go.mod ] && go mod init firewall-agent || true
-RUN go get github.com/lib/pq
 
-# Build all Go files into one binary
+# Resolve and tidy dependencies inside the container
+RUN go mod tidy
+
+# Build the binary
 RUN go build -o resolver .
 
 # Stage 2: Final runtime container
@@ -25,6 +29,7 @@ RUN curl -L -o subfinder.zip https://github.com/projectdiscovery/subfinder/relea
     && chmod +x /usr/local/bin/subfinder \
     && rm subfinder.zip
 
+# Copy the built binary from the builder stage
 COPY --from=builder /app/resolver /usr/local/bin/resolver
 
 ENTRYPOINT ["resolver"]

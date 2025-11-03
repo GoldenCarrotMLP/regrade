@@ -7,7 +7,7 @@
 
 # --- Configuration Variables ---
 DOCKER_CONTAINER="supabase-db"
-POSTGRES_USER="postgres"
+POSTGRES_USER="supabase_admin"
 RCLONE_REMOTE="dropbox"
 RCLONE_BASE_DIR="SupabaseServerBackups"
 

@@ -1,9 +1,12 @@
 package main
 
 import (
+    "context"
     "database/sql"
     "log"
     "os"
+    "os/signal"
+    "syscall"
     "time"
 
     _ "github.com/lib/pq"
@@ -35,12 +38,24 @@ func main() {
         log.Printf("[syncer] initial sync error: %v", err)
     }
 
-    // Start listener for ip_whitelist changes
-StartWhitelistListener(dbURL, syncer)
-StartHostsListener(dbURL, syncer)
+    // Start listeners
+    StartWhitelistListener(dbURL, syncer)
+    StartHostsListener(dbURL, syncer)
 
+    // Launch workers in background
+    go subfinderWorker(db)
+    go dnsWorker(db, syncer)
+    go collapseWorker(db)
 
-    // Launch workers
-    go subfinderWorker(db)   // runs in background
-    dnsWorker(db, syncer)    // runs in foreground
+    // Block until interrupted (graceful shutdown)
+    sigs := make(chan os.Signal, 1)
+    signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+    <-sigs
+
+    log.Println("Shutting down firewall agent...")
+    // If you need cleanup, add it here (cancel contexts, close channels, etc.)
+    ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+    defer cancel()
+    _ = db.Close()
+    <-ctx.Done()
 }

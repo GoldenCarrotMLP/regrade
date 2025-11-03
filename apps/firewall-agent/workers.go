@@ -12,7 +12,7 @@ import (
     "sync"
     "time"
 
-    "github.com/apparentlymart/go-cidr/cidr"
+    "github.com/projectdiscovery/mapcidr"
 )
 
 type Host struct {
@@ -160,6 +160,10 @@ func fetchAllSubdomains(db *sql.DB) ([]Subdomain, error) {
         SELECT id, subdomain
         FROM firewall.subdomains
         WHERE active = true
+          AND (
+            resolved_at IS NULL
+            OR resolved_at <= NOW() - INTERVAL '24 hours'
+          )
         ORDER BY resolved_at NULLS FIRST, resolved_at ASC
     `)
     if err != nil {
@@ -249,50 +253,67 @@ func collapseWorker(db *sql.DB) {
     }
 }
 
-func collapseSubdomainRanges(db *sql.DB, subdomainID int) error {
-    rows, err := db.Query(`SELECT ip::text FROM firewall.resolved_ips WHERE subdomain_id=$1`, subdomainID)
+func collapseSubdomainRanges(db *sql.DB, subdomainID int) error {  
+    rows, err := db.Query(`SELECT ip::text FROM firewall.resolved_ips WHERE subdomain_id=$1`, subdomainID)  
+    if err != nil {  
+        return err  
+    }  
+    defer rows.Close()  
+  
+    var ipnets []*net.IPNet  
+    for rows.Next() {  
+        var s string  
+        if err := rows.Scan(&s); err != nil {  
+            return err  
+        }  
+        _, ipnet, err := net.ParseCIDR(s)  
+        if err != nil {  
+            log.Printf("[collapse] failed to parse CIDR %s: %v", s, err)  
+            continue  
+        }  
+        ipnets = append(ipnets, ipnet)  
+    }  
+  
+    if len(ipnets) == 0 {  
+        return nil  
+    }  
+  
+    // Use mapcidr to aggregate/merge  
+    coalescedIPv4, coalescedIPv6 := mapcidr.CoalesceCIDRs(ipnets)  
+      
+    var limited []string  
+    for _, n := range append(coalescedIPv4, coalescedIPv6...) {  
+        ones, bits := n.Mask.Size()  
+        if bits == 32 && ones < 16 {  
+            base := n.IP.Mask(net.CIDRMask(16, 32))  
+            limited = append(limited, base.String() + "/16")  
+        } else {  
+            limited = append(limited, n.String())  
+        }  
+    }  
+
+
+    tx, err := db.Begin()
     if err != nil {
         return err
     }
-    defer rows.Close()
 
-    var nets []*net.IPNet
-    for rows.Next() {
-        var s string
-        rows.Scan(&s)
-        _, n, _ := net.ParseCIDR(s)
-        nets = append(nets, n)
+    // Clear old entries
+    if _, err := tx.Exec(`DELETE FROM firewall.resolved_ips WHERE subdomain_id=$1`, subdomainID); err != nil {
+        tx.Rollback()
+        return err
     }
 
-    if len(nets) == 0 {
-        return nil
-    }
-
-    collapsed := cidr.MergeCIDRs(nets)
-
-    var limited []*net.IPNet
-    for _, n := range collapsed {
-        ones, bits := n.Mask.Size()
-        if bits == 32 && ones < 16 {
-            base := n.IP.Mask(net.CIDRMask(16, 32))
-            _, c, _ := net.ParseCIDR(base.String() + "/16")
-            limited = append(limited, c)
-        } else {
-            limited = append(limited, n)
-        }
-    }
-
-    tx, _ := db.Begin()
-    _, _ = tx.Exec(`DELETE FROM firewall.resolved_ips WHERE subdomain_id=$1`, subdomainID)
+    // Insert collapsed ranges
     for _, c := range limited {
-        _, err := tx.Exec(`
+        if _, err := tx.Exec(`
             INSERT INTO firewall.resolved_ips (subdomain_id, ip, last_resolved)
             VALUES ($1, $2, NOW())
-        `, subdomainID, c.String())
-        if err != nil {
+        `, subdomainID, c); err != nil {
             tx.Rollback()
             return err
         }
     }
+
     return tx.Commit()
 }
