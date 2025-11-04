@@ -58,7 +58,7 @@ services:
       NODE_ENV: production
       # You can add your NEXT_PUBLIC_ variables here
       # These will override what's in your .env file for the container
-      NEXT_PUBLIC_SUPABASE_URL: ${API_EXTERNAL_URL}
+      NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
       NEXT_PUBLIC_DEV_ONLY_SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
@@ -75,17 +75,17 @@ services:
     build:
       context: ../supabase
       dockerfile: apps/studio/Dockerfile
-      target: dev 
-    command: pnpm dev:studio
+      #target: dev 
+   # command: pnpm dev:studio
     restart: unless-stopped
     volumes:
       - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro
 
-    develop:
-      watch:
-      - path: ../supabase/apps/studio
-        target: /app/apps/studio
-        action: sync
+    #develop:
+   #   watch:
+   #   - path: ../supabase/apps/studio
+    #    target: /app/apps/studio
+  #      action: sync
 
     healthcheck:
       test:

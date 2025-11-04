@@ -1,4 +1,5 @@
 # 1. Build the image locally
+docker compose build web
 
 # 2. Get the current Git version
 GIT_HASH=$(git rev-parse --short HEAD)
@@ -11,3 +12,6 @@ docker tag supabase-web tuplasma/regrade-web:latest
 # 4. Push to Docker Hub
 docker push tuplasma/regrade-web:$GIT_HASH
 docker push tuplasma/regrade-web:latest
+
+# 5. Restart the web service to use the new image
+docker compose down web && docker compose up -d web
