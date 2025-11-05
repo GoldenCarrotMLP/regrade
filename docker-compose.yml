@@ -127,6 +127,7 @@ services:
 
       LOGFLARE_PRIVATE_ACCESS_TOKEN: ${LOGFLARE_PRIVATE_ACCESS_TOKEN}
       LOGFLARE_URL: http://analytics:4000
+      PROMETHEUS_URL: http://prometheus:9090
       NEXT_PUBLIC_ENABLE_LOGS: true
       # Comment to use Big Query backend for analytics
       NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
@@ -475,11 +476,60 @@ services:
       # Uncomment to use Big Query backend for analytics
       # GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID}
       # GOOGLE_PROJECT_NUMBER: ${GOOGLE_PROJECT_NUMBER}
+  
+  node-exporter:  
+    container_name: supabase-node-exporter  
+    image: prom/node-exporter:latest  
+    restart: unless-stopped  
+    command:  
+      - '--path.rootfs=/host'  
+    pid: host  
+    volumes:  
+      - '/:/host:ro,rslave'  
+    ports:  
+      - "9100:9100"  
+    networks:  
+      - default
+
+  prometheus:  
+    container_name: supabase-prometheus  
+    image: prom/prometheus:latest  
+    restart: unless-stopped  
+    ports:  
+      - "9090:9090"  
+    volumes:  
+      - ./volumes/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro  
+      - prometheus-data:/prometheus  
+    command:  
+      - '--config.file=/etc/prometheus/prometheus.yml'  
+      - '--storage.tsdb.path=/prometheus'  
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'  
+      - '--web.console.templates=/usr/share/prometheus/consoles'  
+    depends_on:  
+      postgres-exporter:  
+        condition: service_started  
+    networks:  
+      - default  
+    
+
+
+  postgres-exporter:  
+    container_name: supabase-postgres-exporter  
+    image: prometheuscommunity/postgres-exporter:latest  
+    restart: unless-stopped  
+    depends_on:  
+      db:  
+        condition: service_healthy  
+    environment:  
+      DATA_SOURCE_NAME: "postgresql://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable"  
+    ports:  
+      - "9187:9187"
 
   # Comment out everything below this point if you are using an external Postgres database
   db:
     container_name: supabase-db
     image: supabase/postgres:15.8.1.060
+    #image: supabase/postgres:17.6.1.034
     restart: unless-stopped
     volumes:
       - ./volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
@@ -491,6 +541,7 @@ services:
       - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
       # PGDATA directory is persisted between restarts
       - ./volumes/db/data:/var/lib/postgresql/data:Z
+      #- ./volumes/db/data17:/var/lib/postgresql/data:Z
       # Changes required for internal supabase data such as _analytics
       - ./volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z
       # Changes required for Analytics support
@@ -535,7 +586,7 @@ services:
       ]
 
   db17:
-    container_name: supabase-db-17
+    container_name: supabase-db17
     image: supabase/postgres:17.6.1.034
     restart: unless-stopped
     volumes:
@@ -655,3 +706,4 @@ services:
 
 volumes:
   db-config:
+  prometheus-data:
