@@ -56,7 +56,7 @@ services:
     
     environment:
       NODE_ENV: production
-      # You can add your NEXT_PUBLIC_ variables here
+      # You can add your NEXT_PUBLIC_ variables here 
       # These will override what's in your .env file for the container
       NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
@@ -75,17 +75,22 @@ services:
     build:
       context: ../supabase
       dockerfile: apps/studio/Dockerfile
-      #target: dev 
+      target: dev 
    # command: pnpm dev:studio
+    command: [
+      "sh",
+      "-c",
+      "mkdir -p /root/.config/rclone && cp /tmp/rclone.conf /root/.config/rclone/rclone.conf && pnpm dev:studio"
+    ]
     restart: unless-stopped
     volumes:
       - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro
-
-    #develop:
-   #   watch:
-   #   - path: ../supabase/apps/studio
-    #    target: /app/apps/studio
-  #      action: sync
+      - ~/.config/rclone/rclone.conf:/tmp/rclone.conf:ro
+    develop:
+      watch:
+      - path: ../supabase/apps/studio
+        target: /app/apps/studio
+        action: sync
 
     healthcheck:
       test:
@@ -101,6 +106,8 @@ services:
     depends_on:
       analytics:
         condition: service_healthy
+    
+    
     environment:
       STUDIO_PG_META_URL: http://meta:8080
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -108,12 +115,15 @@ services:
       DEFAULT_ORGANIZATION_NAME: ${STUDIO_DEFAULT_ORGANIZATION}
       DEFAULT_PROJECT_NAME: ${STUDIO_DEFAULT_PROJECT}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
-
-      SUPABASE_URL: http://kong:8000
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
       SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
       AUTH_JWT_SECRET: ${JWT_SECRET}
+
+      RCLONE_REMOTE: dropbox
+      RCLONE_BASE_DIR: SupabaseServerBackups
+
 
       LOGFLARE_PRIVATE_ACCESS_TOKEN: ${LOGFLARE_PRIVATE_ACCESS_TOKEN}
       LOGFLARE_URL: http://analytics:4000
@@ -549,19 +559,13 @@ services:
       timeout: 5s
       retries: 10
     command:
-      ["bash","-c",
-      "docker-entrypoint.sh postgres & \
-        until pg_isready -U supabase_admin -h localhost; do sleep 2; done; \
-        echo 'Waiting 10s for Supabase init scripts...'; \
-        sleep 10; \
-        echo 'Cleaning schemas...'; \
-
-        for db in postgres _supabase; do \
-          echo Cleaning schemas in $$db...; \
-          psql -U supabase_admin -d $$db -Atc \"SELECT 'DROP SCHEMA IF EXISTS \\\"' || nspname || '\\\" CASCADE;' FROM pg_namespace WHERE nspname NOT IN ('pg_catalog','information_schema','pg_toast');\" | psql -U supabase_admin -d $$db; \
-        done; \
-        exec postgres -c config_file=/etc/postgresql/postgresql.conf -c log_min_messages=notice"]
-
+      [
+        "postgres",
+        "-c",
+        "config_file=/etc/postgresql/postgresql.conf",
+        "-c",
+        "log_min_messages=notice" # prevents Realtime polling queries from appearing in logs
+      ]
 
       
 
