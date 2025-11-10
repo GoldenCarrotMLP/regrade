@@ -68,7 +68,7 @@ services:
       # rather than copying the .env file into the image.
     depends_on:
       - kong
-
+  
   studio:
     container_name: supabase-studio
     #image: supabase/studio:latest
@@ -432,6 +432,9 @@ services:
   analytics:
     container_name: supabase-analytics
     image: supabase/logflare:latest
+    #build:
+    #  context: ../logflare
+    #  dockerfile: Dockerfile
     restart: unless-stopped
     ports:
       - 4000:4000
@@ -441,6 +444,7 @@ services:
     #     source: ${PWD}/gcloud.json
     #     target: /opt/app/rel/logflare/bin/gcloud.json
     #     read_only: true
+
     healthcheck:
       test:
         [
@@ -541,7 +545,6 @@ services:
       - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
       # PGDATA directory is persisted between restarts
       - ./volumes/db/data:/var/lib/postgresql/data:Z
-      #- ./volumes/db/data17:/var/lib/postgresql/data:Z
       # Changes required for internal supabase data such as _analytics
       - ./volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z
       # Changes required for Analytics support
@@ -590,8 +593,23 @@ services:
     image: supabase/postgres:17.6.1.034
     restart: unless-stopped
     volumes:
-      - ./volumes17/supabase-fulldump-2025-10-30_14-00-PM.sql.gz:/dump.sql.gz:Z
-      - ./volumes/db/data17:/var/lib/postgresql/data:Z
+          - ./volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
+          # Must be superuser to create event trigger
+          - ./volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z
+          # Must be superuser to alter reserved role
+          - ./volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:Z
+          # Initialize the database settings with JWT_SECRET and JWT_EXP
+          - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
+          # PGDATA directory is persisted between restarts
+          - ./volumes/db/data17:/var/lib/postgresql/data:Z
+          # Changes required for internal supabase data such as _analytics
+          - ./volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z
+          # Changes required for Analytics support
+          - ./volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:Z
+          # Changes required for Pooler support
+          - ./volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z
+          # Use named volume to persist pgsodium decryption key between restarts
+          - db-config:/etc/postgresql-custom17
     environment:
       POSTGRES_HOST: /var/run/postgresql
       PGPORT: ${POSTGRES_PORT}

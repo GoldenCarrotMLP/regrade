@@ -8,3 +8,5 @@ dns-summary.log
 dns-raw.log
 unique-base-domains.txt
 volumes17/
+apps/nginx-1.25.2
+backup/supabase-postgres-*
