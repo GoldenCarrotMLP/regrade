@@ -8,5 +8,48 @@ dns-summary.log
 dns-raw.log
 unique-base-domains.txt
 volumes17/
-apps/nginx-1.25.2
 backup/supabase-postgres-*
+volumes/nginx/*
+
+
+# --- Build artifacts ---
+objs/
+apps/nginx-1.25.2/conf/sites-available/auto/*
+Makefile
+configure
+*.o
+*.lo
+*.la
+*.a
+*.so
+*.so.*
+*.dylib
+
+# --- Logs ---
+*.log
+logs/
+error.log
+access.log
+
+# --- Certificates & secrets ---
+apps/nginx-1.25.2/conf/ssl/
+
+# --- Docker ---
+*.pid
+*.seed
+*.bak
+*.swp
+*.swo
+*.tmp
+*.lock
+*.cache
+*.tar
+*.gz
+
+# --- OS / Editor junk ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+
