@@ -4,5 +4,9 @@
 	branch = main
 [submodule "apps/nginx-1.25.2/quictls"]
 	path = apps/nginx-1.25.2/quictls
-	url = https://github.com/openssl/openssl
+	url = https://github.com/quictls/openssl
+	branch = main
+[submodule "apps/nginx-1.25.2/ngx_brotli"]
+	path = apps/nginx-1.25.2/ngx_brotli
+	url = https://github.com/google/ngx_brotli
 	branch = main
