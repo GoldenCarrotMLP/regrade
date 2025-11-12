@@ -2,3 +2,7 @@
 	path = apps/regrade
 	url = https://github.com/GoldenCarrotMLP/regrade-web
 	branch = main
+[submodule "apps/nginx-1.25.2/quictls"]
+	path = apps/nginx-1.25.2/quictls
+	url = https://github.com/openssl/openssl
+	branch = main
