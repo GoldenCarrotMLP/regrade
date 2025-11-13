@@ -27,6 +27,8 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    depends_on:
+      - kong
 
   firewall-agent:
     container_name: firewall-agent
@@ -88,15 +90,37 @@ services:
       # rather than copying the .env file into the image.
     depends_on:
       - kong
+
+  web-dev:
+    container_name: regrade-web-dev
+    profiles: ["dev"]
+    build:
+      context: ./apps/regrade
+      dockerfile: Dockerfile
+      target: dev   # <-- use the new dev stage
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./apps/regrade:/app
+      - /app/node_modules   # prevent overwriting node_modules inside container
+    environment:
+      NODE_ENV: development
+      NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+      NEXT_PUBLIC_DEV_ONLY_SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      NEXT_PUBLIC_GEMINI_API_KEY: ${GEMINI_API_KEY}
+    depends_on:
+      - kong
   
   studio:
     container_name: supabase-studio
     #image: supabase/studio:latest
     build:
-      context: ../supabase
+      context: ./apps/supabase
       dockerfile: apps/studio/Dockerfile
-     # target: dev 
-   # command: pnpm dev:studio
+      #target: dev 
     #command: ["sh","-c","mkdir -p /root/.config/rclone && cp /tmp/rclone.conf /root/.config/rclone/rclone.conf && pnpm dev:studio"]
     command: ["sh","-c","mkdir -p /root/.config/rclone && cp /tmp/rclone.conf /root/.config/rclone/rclone.conf && node apps/studio/server.js"]
     
@@ -104,11 +128,11 @@ services:
     volumes:
       - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro
       - ~/.config/rclone/rclone.conf:/tmp/rclone.conf:ro
-    #develop:
-      #watch:
-      #- path: ../supabase/apps/studio
-      #  target: /app/apps/studio
-      #  action: sync
+    develop:
+      watch:
+      - path: ../supabase/apps/studio
+        target: /app/apps/studio
+        action: sync
 
     healthcheck:
       test:
