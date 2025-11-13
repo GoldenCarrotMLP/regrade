@@ -10,3 +10,6 @@
 	path = apps/nginx-1.25.2/ngx_brotli
 	url = https://github.com/google/ngx_brotli
 	branch = main
+[submodule "apps/supabase"]
+	path = apps/supabase
+	url = https://github.com/GoldenCarrotMLP/supabase.git
