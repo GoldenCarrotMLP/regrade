@@ -68,7 +68,7 @@ services:
       # CHANGE THIS: Now that the context is the app folder, the Dockerfile is at the root
       dockerfile: Dockerfile
       # To run in development mode, uncomment the following line:
-      #target: dev
+      target: production
     restart: unless-stopped
     ports:
       # For production, Next.js standalone runs on port 3000
