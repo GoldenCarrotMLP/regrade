@@ -1,0 +1,2 @@
+0,30 14-23 * * 1-5 /app/backup.sh >> /app/backup/cron.log 2>&1
+0 0 * * 2-6 /app/backup.sh >> /app/backup/cron.log 2>&1

@@ -8,6 +8,41 @@
 name: supabase
 services:
 
+  watchdog:
+    container_name: supabase-watchdog
+    build:
+      context: ./apps/watchdog
+      dockerfile: Dockerfile
+    volumes:
+      - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro
+      - ./backup:/app/backup
+    environment:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - rclone
+
+  rclone:
+    image: rclone/rclone:sha-a3ccf4d   # pinned digest
+    container_name: supabase-rclone
+    volumes:
+      - /root/.config/rclone/rclone.conf:/config/rclone/rclone.conf:ro
+      - ./backup:/backup
+
+    command: tail -f /dev/null   # keep container running
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    entrypoint: ["sleep", "infinity"]
 
   nginx:
     build:
@@ -29,33 +64,41 @@ services:
       - "443:443"
     depends_on:
       - kong
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://nginx/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
-  firewall-agent:
-    container_name: firewall-agent
-    build:
-      context: ./apps/firewall-agent
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    volumes:
-      - ./volumes/firewall:/app/volumes/firewall
 
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: postgres
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      DATABASE_URL: postgres://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable
+  #firewall-agent:
+    #container_name: firewall-agent
+    #profiles: ["disabled"]
+    #build:
+      #context: ./apps/firewall-agent
+      #dockerfile: Dockerfile
+    #restart: unless-stopped
+    #volumes:
+      #- ./volumes/firewall:/app/volumes/firewall
+
+    #depends_on:
+      #db:
+        #condition: service_healthy
+    #environment:
+      #POSTGRES_HOST: db
+      #POSTGRES_PORT: 5432
+      #POSTGRES_DB: postgres
+      #POSTGRES_USER: postgres
+      #POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      #DATABASE_URL: postgres://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable
       
-      RESOLVE_INTERVAL: 5s
-      NFT_TABLE: filter_custom
-      NFT_IP_SET: ip_whitelist
-      NFT_WEB_SET: web_whitelist
-    cap_add:
-      - NET_ADMIN
+      #RESOLVE_INTERVAL: 5s
+      #NFT_TABLE: filter_custom
+      #NFT_IP_SET: ip_whitelist
+      #NFT_WEB_SET: web_whitelist
+    #cap_add:
+      #- NET_ADMIN
 
 
   web:
@@ -90,6 +133,14 @@ services:
       # rather than copying the .env file into the image.
     depends_on:
       - kong
+      - nginx
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/web/3000' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+      
 
   web-dev:
     container_name: regrade-web-dev
@@ -113,7 +164,14 @@ services:
       NEXT_PUBLIC_GEMINI_API_KEY: ${GEMINI_API_KEY}
     depends_on:
       - kong
-  
+      - nginx
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c '</dev/tcp/web-dev/3001' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s  
+
   studio:
     container_name: supabase-studio
     #image: supabase/studio:latest
@@ -204,6 +262,12 @@ services:
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
     # https://unix.stackexchange.com/a/294837
     entrypoint: bash -c 'eval "echo \"$$(cat ~/temp.yml)\"" > ~/kong.yml && /docker-entrypoint.sh kong docker-start'
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z kong 8000 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
 
   auth:
     container_name: supabase-auth
@@ -447,6 +511,9 @@ services:
       PG_META_DB_NAME: ${POSTGRES_DB}
       PG_META_DB_USER: supabase_admin
       PG_META_DB_PASSWORD: ${POSTGRES_PASSWORD}
+    healthcheck:
+      test: ["CMD", "true"]
+
 
   functions:
     container_name: supabase-edge-functions
@@ -471,6 +538,8 @@ services:
         "--main-service",
         "/home/deno/functions/main"
       ]
+    healthcheck:
+      test: ["CMD", "true"]
 
   analytics:
     container_name: supabase-analytics
@@ -537,6 +606,13 @@ services:
       - "9100:9100"  
     networks:  
       - default
+    healthcheck:
+      test: ["CMD", "true"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
 
   prometheus:  
     container_name: supabase-prometheus  
@@ -557,6 +633,13 @@ services:
         condition: service_started  
     networks:  
       - default  
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
     
 
 
@@ -571,6 +654,13 @@ services:
       DATA_SOURCE_NAME: "postgresql://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable"  
     ports:  
       - "9187:9187"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9187/metrics || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
 
   # Comment out everything below this point if you are using an external Postgres database
   db:
@@ -634,6 +724,7 @@ services:
   db17:
     container_name: supabase-db17
     image: supabase/postgres:17.6.1.034
+    profiles: ["disabled"]
     restart: unless-stopped
     volumes:
           - ./volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
