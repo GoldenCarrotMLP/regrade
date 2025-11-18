@@ -105,7 +105,7 @@ services:
   web:
     container_name: regrade-web
     
-    #image: tuplasma/regrade-web:36e1fe9
+    #image: tuplasma/regrade-web:dbda82e
 
     build:
       context: ./apps/regrade
