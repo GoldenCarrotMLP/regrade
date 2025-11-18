@@ -1,13 +1,10 @@
 #!/bin/sh
 set -eu
 
-# Load cron schedule
-crontab /etc/cron.d/watchdog
-
 # Send startup notification
 /app/send_telegram.sh "🤖 Watchdog bot online at $(date)"
 
-# Start cron in background
+# Start cron in background (it will read /etc/cron.d/watchdog automatically)
 crond
 
 # Start health monitoring loop in foreground

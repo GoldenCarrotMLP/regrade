@@ -56,6 +56,7 @@ services:
       # OPTIONAL: Set to 0 for production certificates. Defaults to 1 (staging) if not set.
       STAGING: 0
 
+
     volumes:
       - ./volumes/nginx/conf/ssl:/etc/nginx/ssl:ro
       - ./volumes/nginx/letsencrypt:/etc/letsencrypt
@@ -462,7 +463,7 @@ services:
       POSTGREST_URL: http://rest:3000
       PGRST_JWT_SECRET: ${JWT_SECRET}
       DATABASE_URL: postgres://supabase_storage_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
-      FILE_SIZE_LIMIT: 52428800
+      FILE_SIZE_LIMIT: 5242880000
       STORAGE_BACKEND: file
       FILE_STORAGE_BACKEND_PATH: /var/lib/storage
       TENANT_ID: stub

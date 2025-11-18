@@ -10,33 +10,39 @@ check_docker_services() {
   containers=$(curl -s --unix-socket /var/run/docker.sock http://localhost/containers/json)
 
   # Loop over IDs
-for cid in $(echo "$containers" | grep -o '"Id":"[^"]*"' | cut -d'"' -f4); do
-  info=$(curl -s --unix-socket /var/run/docker.sock http://localhost/containers/$cid/json)
+  for cid in $(echo "$containers" | grep -o '"Id":"[^"]*"' | cut -d'"' -f4); do
+    info=$(curl -s --unix-socket /var/run/docker.sock http://localhost/containers/$cid/json)
 
-  name=$(echo "$info" | grep -o '"Name":"[^"]*"' | cut -d'"' -f4 | sed 's|/||')
-  state=$(echo "$info" | grep -o '"Status":"[^"]*"' | head -n1 | cut -d'"' -f4)
-  health=$(echo "$info" | grep -o '"Health":{"Status":"[^"]*"' | cut -d'"' -f6 || echo "")
+    # Extract container name
+    name=$(echo "$info" | grep -o '"Name":"[^"]*"' | head -n1 | cut -d'"' -f4 | sed 's|/||')
 
-  case "$state" in
-    running) ;; # check health below
-    exited|dead|created|paused)
-      echo "🛑 $name is $state"
-      /app/send_telegram.sh "🛑 $name is $state at $(date)"
-      ;;
-  esac
+    # Extract state status (running, exited, etc.)
+    state=$(echo "$info" | grep -o '"Status":"[^"]*"' | head -n1 | cut -d'"' -f4)
 
-  case "$health" in
-    healthy) ;;
-    unhealthy)
-      echo "⚠️ $name is unhealthy"
-      /app/send_telegram.sh "⚠️ $name is unhealthy at $(date)"
-      ;;
-    starting)
-      echo "⏳ $name is starting"
-      /app/send_telegram.sh "⏳ $name is starting at $(date)"
-      ;;
-  esac
-done
+    # Extract health status if present
+    health=$(echo "$info" | grep -o '"Health":{"Status":"[^"]*"' | head -n1 | cut -d'"' -f6 || echo "")
+
+    # Report container state
+    case "$state" in
+      running) ;; # check health below
+      exited|dead|created|paused)
+        /app/send_telegram.sh "🛑 Container $name is $state at $(date)"
+        alert=1
+        ;;
+    esac
+
+    # Report health status
+    case "$health" in
+      healthy) ;; # all good
+      unhealthy)
+        /app/send_telegram.sh "⚠️ Container $name health check failed at $(date)"
+        alert=1
+        ;;
+      starting)
+        /app/send_telegram.sh "⏳ Container $name health check still starting at $(date)"
+        ;;
+    esac
+  done
 
   return $alert
 }
@@ -53,7 +59,7 @@ if [ "$MODE" = "docker+telegram" ]; then
   exit $?
 fi
 
-# Default: continuous loop every 5s
+# Default: continuous loop every 20s
 while true; do
   check_docker_services
   sleep 20
