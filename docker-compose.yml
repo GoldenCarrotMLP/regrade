@@ -62,7 +62,9 @@ services:
       - ./volumes/nginx/letsencrypt:/etc/letsencrypt
     ports:
       - "80:80"
-      - "443:443"
+      - "443:443/tcp"
+      - "443:443/udp"
+
     depends_on:
       - kong
     healthcheck:
