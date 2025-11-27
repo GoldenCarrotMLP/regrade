@@ -9,11 +9,11 @@ set -eu
 
 # Trigger an immediate backup on startup
 echo "Running initial backup..."
-#if ! /app/backup.sh; then
-#  /app/send_telegram.sh "❌ Initial backup failed at $(date)"
-#else
-#  /app/send_telegram.sh "✅ Initial backup completed at $(date)"
-#fi
+if ! /app/backup.sh; then
+  /app/send_telegram.sh "❌ Initial backup failed at $(date)"
+else
+  /app/send_telegram.sh "✅ Initial backup completed at $(date)"
+fi
 
 # Start cron in background (it will read /etc/cron.d/watchdog automatically)
 crond

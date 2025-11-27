@@ -107,7 +107,7 @@ services:
   web:
     container_name: regrade-web
     
-    #image: tuplasma/regrade-web:dbda82e
+    #image: tuplasma/regrade-web:ac58fb8
 
     build:
       context: ./apps/regrade
@@ -117,8 +117,8 @@ services:
       target: production
     restart: unless-stopped
     ports:
-      # For production, Next.js standalone runs on port 3000
-      # For development, your `dev` script runs on port 3001
+      # For production, Next.js standalone runs on port 3000  docker compose exec -it web bash
+      # For development, your `dev` script runs on port 3001  ls node_modules/@reduxjs/toolkit/dist
       - "3000:3000" # For dev mode (npm run dev)
       #- "3000:3000" # For production
     
@@ -165,9 +165,6 @@ services:
       NEXT_PUBLIC_DEV_ONLY_SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
       NEXT_PUBLIC_GEMINI_API_KEY: ${GEMINI_API_KEY}
-    depends_on:
-      - kong
-      - nginx
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/web-dev/3001' || exit 1"]
       interval: 30s
