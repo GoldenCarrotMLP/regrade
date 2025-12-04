@@ -7,6 +7,9 @@ set -eu
 # Start log watcher in background
 /app/logwatch.sh &
 
+# Start disk watcher in background (immediate startup alert happens inside the script)
+/app/diskwatch.sh &
+
 # Trigger an immediate backup on startup
 echo "Running initial backup..."
 if ! /app/backup.sh; then
