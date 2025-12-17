@@ -178,9 +178,9 @@ services:
     build:
       context: ./apps/supabase
       dockerfile: apps/studio/Dockerfile
-      #target: dev 
-    #command: ["sh","-c","mkdir -p /root/.config/rclone && cp /tmp/rclone.conf /root/.config/rclone/rclone.conf && pnpm dev:studio"]
-    command: ["sh","-c","mkdir -p /root/.config/rclone && cp /tmp/rclone.conf /root/.config/rclone/rclone.conf && node apps/studio/server.js"]
+      target: dev 
+    command: ["sh","-c","mkdir -p /root/.config/rclone && cp /tmp/rclone.conf /root/.config/rclone/rclone.conf && pnpm dev:studio"]
+    #command: ["sh","-c","mkdir -p /root/.config/rclone && cp /tmp/rclone.conf /root/.config/rclone/rclone.conf && node apps/studio/server.js"]
     
     restart: unless-stopped
     volumes:
@@ -859,3 +859,4 @@ services:
 volumes:
   db-config:
   prometheus-data:
+
