@@ -19,6 +19,7 @@ services:
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "true"]
       interval: 30s
@@ -107,7 +108,7 @@ services:
   web:
     container_name: regrade-web
     
-    #image: tuplasma/regrade-web:ac58fb8
+    #image: tuplasma/regrade-web:6b969b6
 
     build:
       context: ./apps/regrade
