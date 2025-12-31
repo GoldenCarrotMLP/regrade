@@ -2,21 +2,37 @@
 set -eu
 
 DEVICE="/"
-MIN_FREE_GB=100   # configurable baseline threshold
+MIN_FREE_GB=100
 
-send_alert() {
-  # Get available space in MB (BusyBox-friendly), convert to GB
-  avail_mb=$(df -m "$DEVICE" | awk 'NR==2 {print $4}')
-  avail_gb=$((avail_mb / 1024))
-  used_pct=$(df -h "$DEVICE" | awk 'NR==2 {print $5}' | tr -d '%')
+MAX_INTERVAL=$((1000 * 60))   # 1000 minutes in seconds
+MIN_INTERVAL=60               # 1 minute
 
-  # Free percentage relative to MIN_FREE_GB
-  free_pct=$(( avail_gb * 100 / MIN_FREE_GB ))
-  [ "$free_pct" -gt 100 ] && free_pct=100
-  [ "$free_pct" -lt 0 ] && free_pct=0
+log() {
+  echo "[DISKWATCH] $*" >&2
+}
 
-  # Pick scarier message every 5% band
-  case $free_pct in
+get_avail_gb() {
+  line=$(df -m "$DEVICE" 2>/dev/null | awk 'NR==2 {print $4}')
+  case "$line" in
+    ''|*[!0-9]*) echo 0 ;;
+    *) echo $((line / 1024)) ;;
+  esac
+}
+
+get_used_pct() {
+  used=$(df -h "$DEVICE" 2>/dev/null | awk 'NR==2 {print $5}' | tr -d '%')
+  case "$used" in
+    ''|*[!0-9]*) echo 0 ;;
+    *) echo "$used" ;;
+  esac
+}
+
+pick_message() {
+  free_pct="$1"
+  avail_gb="$2"
+  used_pct="$3"
+
+  case "$free_pct" in
     9[5-9]|100) msg="⚠️ [DISKWATCH] Stable but shrinking — ${avail_gb}GB free (${used_pct}% used)." ;;
     9[0-4])     msg="🚨 [DISKWATCH] Danger zone — ${avail_gb}GB free (${used_pct}% used)." ;;
     8[5-9])     msg="🔥 [DISKWATCH] Critical — ${avail_gb}GB free (${used_pct}% used)." ;;
@@ -38,22 +54,73 @@ send_alert() {
     *)          msg="💀 [DISKWATCH] TOTAL FAILURE — <1% of threshold free. Shutdown unavoidable." ;;
   esac
 
-  # Send message
-  /app/send_telegram.sh "$msg"
-
-  # Return interval in seconds (100% free → 3600s, 1% free → 60s)
-  if [ "$free_pct" -gt 1 ]; then
-    echo $(( (free_pct * 3540 / 99) + 60 ))
-  else
-    echo 60
-  fi
+  echo "$msg"
 }
 
-# --- Startup immediate alert ---
-interval=$(send_alert)
+compute_interval() {
+  avail_gb="$1"
 
-# --- Continuous loop ---
+  # No alerts above threshold
+  if [ "$avail_gb" -gt "$MIN_FREE_GB" ]; then
+    echo 0
+    return
+  fi
+
+  # Clamp below 1 GB
+  if [ "$avail_gb" -le 1 ]; then
+    echo "$MIN_INTERVAL"
+    return
+  fi
+
+  # Linear interpolation:
+  # MIN_FREE_GB → 1000 minutes
+  # 1 GB        → 1 minute
+  interval=$(
+    awk -v a="$avail_gb" -v min="$MIN_INTERVAL" -v max="$MAX_INTERVAL" -v thr="$MIN_FREE_GB" '
+      BEGIN {
+        interval = min + (a - 1) * (max - min) / (thr - 1)
+        if (interval < min) interval = min
+        if (interval > max) interval = max
+        printf("%d", interval)
+      }
+    '
+  )
+
+  echo "$interval"
+}
+
+send_alert() {
+  avail_gb=$(get_avail_gb)
+  used_pct=$(get_used_pct)
+
+  # Compute interval
+  interval=$(compute_interval "$avail_gb")
+
+  # If interval = 0 → above threshold → silent mode
+  if [ "$interval" -eq 0 ]; then
+    echo 0
+    return
+  fi
+
+  # Compute free_pct for message selection
+  free_pct=$(( avail_gb * 100 / MIN_FREE_GB ))
+  [ "$free_pct" -gt 100 ] && free_pct=100
+  [ "$free_pct" -lt 0 ] && free_pct=0
+
+  msg=$(pick_message "$free_pct" "$avail_gb" "$used_pct")
+  /app/send_telegram.sh "$msg"
+
+  echo "$interval"
+}
+
+# --- Main loop ---
 while true; do
-  sleep "$interval"
   interval=$(send_alert)
+
+  # Silent mode above threshold → check every 10 minutes
+  if [ "$interval" -eq 0 ]; then
+    sleep 600
+  else
+    sleep "$interval"
+  fi
 done
