@@ -72,9 +72,7 @@ compute_interval() {
     return
   fi
 
-  # Linear interpolation:
-  # MIN_FREE_GB → 1000 minutes
-  # 1 GB        → 1 minute
+  # Linear interpolation
   interval=$(
     awk -v a="$avail_gb" -v min="$MIN_INTERVAL" -v max="$MAX_INTERVAL" -v thr="$MIN_FREE_GB" '
       BEGIN {
@@ -108,7 +106,9 @@ send_alert() {
   [ "$free_pct" -lt 0 ] && free_pct=0
 
   msg=$(pick_message "$free_pct" "$avail_gb" "$used_pct")
-  /app/send_telegram.sh "$msg"
+  
+  # --- FIX IS HERE: Redirect output to /dev/null ---
+  /app/send_telegram.sh "$msg" >/dev/null 2>&1
 
   echo "$interval"
 }
@@ -117,10 +117,19 @@ send_alert() {
 while true; do
   interval=$(send_alert)
 
-  # Silent mode above threshold → check every 10 minutes
-  if [ "$interval" -eq 0 ]; then
-    sleep 600
-  else
-    sleep "$interval"
-  fi
+  # Validate interval is a number before sleeping
+  case "$interval" in
+      ''|*[!0-9]*) 
+          # If something goes wrong, default to 10 minutes to prevent crash loop
+          log "Error computing interval, got: $interval. Defaulting to 600s."
+          sleep 600 
+          ;;
+      *) 
+          if [ "$interval" -eq 0 ]; then
+            sleep 600
+          else
+            sleep "$interval"
+          fi
+          ;;
+  esac
 done

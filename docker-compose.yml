@@ -45,35 +45,35 @@ services:
       start_period: 10s
     entrypoint: ["sleep", "infinity"]
 
-  nginx:
-    build:
-      context: ./apps/nginx-1.25.2
-      dockerfile: Dockerfile
-    container_name: regrade-nginx
-    restart: unless-stopped
-    environment:
+  #nginx:
+  #  build:
+  #    context: ./apps/nginx-1.25.2
+  #    dockerfile: Dockerfile
+  #  container_name: regrade-nginx
+  #  restart: unless-stopped
+  #  environment:
       # REQUIRED: The script will fail to start without this.
-      LETSENCRYPT_EMAIL: andersonpena00@gmail.com
+  #    LETSENCRYPT_EMAIL: andersonpena00@gmail.com
       # OPTIONAL: Set to 0 for production certificates. Defaults to 1 (staging) if not set.
-      STAGING: 0
+  #    STAGING: 0
 
 
-    volumes:
-      - ./volumes/nginx/conf/ssl:/etc/nginx/ssl:ro
-      - ./volumes/nginx/letsencrypt:/etc/letsencrypt
-    ports:
-      - "80:80"
-      - "443:443/tcp"
-      - "443:443/udp"
+  #  volumes:
+  #    - ./volumes/nginx/conf/ssl:/etc/nginx/ssl:ro
+  #    - ./volumes/nginx/letsencrypt:/etc/letsencrypt
+  #  ports:
+  #    - "80:80"
+  #    - "443:443/tcp"
+  #    - "443:443/udp"
 
-    depends_on:
-      - kong
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://nginx/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+  #  depends_on:
+  #    - kong
+  #  healthcheck:
+  #    test: ["CMD-SHELL", "curl -f http://nginx/ || exit 1"]
+  #    interval: 30s
+  #    timeout: 10s
+  #    retries: 3
+  #    start_period: 10s
 
 
   #firewall-agent:
@@ -137,7 +137,6 @@ services:
       # rather than copying the .env file into the image.
     depends_on:
       - kong
-      - nginx
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/web/3000' || exit 1"]
       interval: 30s
@@ -187,6 +186,7 @@ services:
     volumes:
       - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro
       - ~/.config/rclone/rclone.conf:/tmp/rclone.conf:ro
+      - ./volumes/db/snippets:/app/supabase/snippets:Z
     develop:
       watch:
       - path: ../supabase/apps/studio
@@ -235,6 +235,8 @@ services:
       NEXT_ANALYTICS_BACKEND_PROVIDER: postgres
       # Uncomment to use Big Query backend for analytics
       # NEXT_ANALYTICS_BACKEND_PROVIDER: bigquery
+
+      SNIPPETS_MANAGEMENT_FOLDER: /app/supabase/snippets
 
   kong:
     container_name: supabase-kong
