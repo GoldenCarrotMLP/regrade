@@ -9,7 +9,10 @@ PATTERNS="invalid record length|could not read block|wal corruption|database fil
 
 while true; do
   LOGS="$(docker logs --tail 200 "$DB_CONTAINER" 2>&1 || true)"
-  MATCHES="$(printf '%s' "$LOGS" | grep -iE "$PATTERNS" || true)"
+  MATCHES="$(printf '%s' "$LOGS" \
+  | grep -iE "$PATTERNS" \
+  | grep -vi 'terminating connection due to administrator command' \
+  || true)"
 
   if [ -n "$MATCHES" ]; then
     echo "⚠️ [LOGWATCH] Detected match:"
