@@ -1,0 +1,33 @@
+# Ignore everything by default
+*
+
+# Keep this .gitignore
+!.gitignore
+!nginx.conf
+# -----------------------------
+# Keep Nginx config directories
+# -----------------------------
+!sites-enabled/
+!sites-enabled/**
+
+# -----------------------------
+# Keep fallback certs (required for first boot)
+# -----------------------------
+!ssl/
+!ssl/fallback.fullchain.pem
+!ssl/fallback.privkey.pem
+!ssl/update-certs.sh
+
+# Ignore real Let's Encrypt certs
+ssl/*.pem
+!ssl/fallback.fullchain.pem
+!ssl/fallback.privkey.pem
+
+# -----------------------------
+# Keep certbot-www directory structure
+# -----------------------------
+!certbot-www/
+!certbot-www/.well-known/
+
+# Ignore ACME challenge files
+certbot-www/.well-known/*

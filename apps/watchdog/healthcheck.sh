@@ -14,8 +14,13 @@ check_docker_services() {
     return 1
   fi
 
-  # Loop over IDs
-  for cid in $(echo "$containers" | grep -o '"Id":"[^"]*"' | cut -d'"' -f4); do
+  # Extract container IDs
+  cids=$(echo "$containers" | grep -o '"Id":"[^"]*"' | cut -d'"' -f4)
+
+  # If no containers found, nothing to check
+  [ -z "$cids" ] && return 0
+
+  for cid in $cids; do
     info=$(curl -s --unix-socket /var/run/docker.sock http://localhost/containers/$cid/json || echo "")
 
     if [ -z "$info" ]; then
@@ -31,7 +36,11 @@ check_docker_services() {
     state=$(echo "$info" | grep -o '"Status":"[^"]*"' | head -n1 | cut -d'"' -f4)
 
     # Extract health status if present
-    health=$(echo "$info" | grep -o '"Health":{"Status":"[^"]*"' | head -n1 | cut -d'"' -f6 || echo "")
+    health=$(echo "$info" \
+      | grep -o '"Health":{"Status":"[^"]*"' 2>/dev/null \
+      | head -n1 \
+      | cut -d'"' -f6 || true)
+    health=${health:-""}
 
     # Report container state
     case "$state" in
@@ -72,6 +81,6 @@ fi
 
 # Default: continuous loop every 20s
 while true; do
-  check_docker_services
+  check_docker_services || true   # <-- prevents loop from dying
   sleep 20
 done

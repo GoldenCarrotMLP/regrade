@@ -10,7 +10,6 @@ dns-raw.log
 unique-base-domains.txt
 volumes17/
 backup/supabase-postgres-*
-volumes/nginx/*
 apps/regradeit/*
 apps/sandbox/*
 
