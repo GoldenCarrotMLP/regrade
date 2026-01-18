@@ -52,6 +52,7 @@ services:
     volumes:
       - ./volumes/nginx/sites-enabled:/etc/nginx/sites-enabled:ro
       - ./volumes/nginx/letsencrypt:/etc/letsencrypt
+      - ./volumes/nginx/certbot-www:/var/www/certbot
       - ./volumes/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./volumes/nginx/ssl:/etc/nginx/ssl
     user: root
@@ -70,7 +71,57 @@ services:
       timeout: 2s
       retries: 10
 
+  mailserver:
+    image: docker.io/mailserver/docker-mailserver:latest
+    container_name: mailserver
+    hostname: mail
+    domainname: ${DOMAIN}
+    restart: unless-stopped
 
+    volumes:
+      - ./volumes/mail/data/maildata:/var/mail
+      - ./volumes/mail/data/mailstate:/var/mail-state
+      - ./volumes/mail/config/maillogs:/var/log/mail
+      - ./volumes/mail/config:/tmp/docker-mailserver
+      #- ./volumes/mail/config/10-init-mailbox.sh:/usr/local/bin/setup.d/10-init-mailbox.sh
+
+      - ./volumes/nginx/letsencrypt:/etc/letsencrypt:ro
+
+    ports:
+      - "25:25"
+      - "465:465"
+      - "587:587"
+      - "993:993"
+      - "995:995"
+    environment:
+      DMS_DOMAIN: ${DOMAIN}
+      DMS_HOSTNAME: mail
+      ENABLE_POP3: 1 
+      ENABLE_POP3_SSL: 1
+      ENABLE_SPAMASSASSIN: 1
+      ENABLE_CLAMAV: 0
+      ENABLE_FAIL2BAN: 1
+      ENABLE_POSTGREY: 0
+      ENABLE_SASLAUTHD: 0
+      ENABLE_OPENDKIM: 1
+      OPENDKIM_KEY_LENGTH: 2048
+      SSL_TYPE: ${SSL_TYPE}
+      SSL_CERT_PATH: ${SSL_CERT_PATH}
+      SSL_KEY_PATH: ${SSL_KEY_PATH}
+      DMS_MAILBOX_FORMAT: maildir
+      POSTFIX_INET_PROTOCOLS: ipv4
+      DMS_AUTO_MAILBOX: auth@regrade.net
+      DMS_AUTO_PASSWORD: ${SMTP_PASS}
+
+    cap_add:
+      - NET_ADMIN
+      - SYS_PTRACE
+
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "25"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
 
 
   certbot:
@@ -305,6 +356,12 @@ services:
       SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}
+      # 🔥 Add these: 
+      KONG_TRUSTED_IPS: 0.0.0.0/0 
+      KONG_REAL_IP_HEADER: X-Forwarded-For 
+      KONG_REAL_IP_RECURSIVE: "on" # Ensures Kong forwards the proto + host to Supabase Auth 
+      KONG_HEADERS_UPSTREAM: X-Forwarded-Proto, X-Forwarded-Host, X-Forwarded-For
+
     # https://unix.stackexchange.com/a/294837
     entrypoint: bash -c 'eval "echo \"$$(cat ~/temp.yml)\"" > ~/kong.yml && /docker-entrypoint.sh kong docker-start'
     healthcheck:
@@ -347,6 +404,7 @@ services:
 
       GOTRUE_SITE_URL: ${SITE_URL}
       GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS}
+      GOTRUE_MAILER_EXTERNAL_HOSTS: ${ADDITIONAL_REDIRECT_URLS}
       GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP}
 
       GOTRUE_JWT_ADMIN_ROLES: service_role

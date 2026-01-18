@@ -1,0 +1,4 @@
+*
+!.gitignore
+!config/
+!config/10-init-mailbox.sh

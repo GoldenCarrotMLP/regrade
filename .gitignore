@@ -2,6 +2,8 @@ studio.tar
 volumes/db/data/
 volumes/db/data17/
 volumes/db/data.*
+volumes/storage/
+
 .env
 backup/cron.log
 dns-capture.log
@@ -34,7 +36,6 @@ access.log
 
 # --- Certificates & secrets ---
 apps/nginx-1.25.2/conf/ssl/
-
 # --- Docker ---
 *.pid
 *.seed
