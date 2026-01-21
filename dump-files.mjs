@@ -2,6 +2,7 @@
 import fs from "fs";
 import path from "path";
 import { execSync } from "child_process";
+import { isBinary } from "istextorbinary";
 
 const rootDir = process.cwd();
 const outFile = path.join(rootDir, "dump.txt");
@@ -21,13 +22,28 @@ function getTrackedFiles() {
 function main() {
   const files = getTrackedFiles();
 
-  fs.writeFileSync(outFile, "=== Git‑tracked files ===\n\n");
+  fs.writeFileSync(outFile, "=== Dump of Git‑tracked non‑binary files ===\n\n");
 
-  for (const file of files) {
-    fs.appendFileSync(outFile, file + "\n");
+  for (const rel of files) {
+    const full = path.join(rootDir, rel);
+
+    // Skip anything that is not a real file (submodules, directories, etc.)
+    const stat = fs.statSync(full);
+    if (!stat.isFile()) continue;
+
+    const buffer = fs.readFileSync(full);
+
+    if (isBinary(null, buffer)) continue;
+
+    const content = buffer.toString("utf8");
+
+    fs.appendFileSync(outFile, rel + "\n");
+    fs.appendFileSync(outFile, "```\n");
+    fs.appendFileSync(outFile, content + "\n");
+    fs.appendFileSync(outFile, "```\n\n");
   }
 
-  console.log(`Wrote ${files.length} tracked files to dump.txt`);
+  console.log(`Dump written to ${outFile}`);
 }
 
 main();
