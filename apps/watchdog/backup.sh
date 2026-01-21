@@ -1,5 +1,6 @@
 #!/bin/sh
 set -eu
+set -o pipefail
 
 # Global trap: catch any uncaught error
 trap 'err=$?; /app/send_telegram.sh "❌ Backup script error (exit $err) at $(date)"' ERR
@@ -18,22 +19,28 @@ LOCAL_BACKUP_PATH="${LOCAL_BACKUP_DIR}/${BACKUP_FILENAME}"
 mkdir -p "${LOCAL_BACKUP_DIR}"
 
 echo "Creating pg_dump..."
-if ! output=$(docker exec "${DOCKER_CONTAINER}" \
-    pg_dump -U "${POSTGRES_USER}" --clean --if-exists "${DATABASE_NAME}" 2>&1 | gzip > "${LOCAL_BACKUP_PATH}"); then
-    /app/send_telegram.sh "❌ Backup failed for ${DATABASE_NAME} at $(date)\n$output"
+if ! docker exec "${DOCKER_CONTAINER}" \
+    pg_dump -U "${POSTGRES_USER}" --clean --if-exists "${DATABASE_NAME}" \
+    | gzip > "${LOCAL_BACKUP_PATH}"; then
+    /app/send_telegram.sh "❌ Backup failed for ${DATABASE_NAME} at $(date)"
     exit 1
 fi
 
-# Sanity check: file must not be empty
+# Sanity check: file must not be empty and must be valid gzip
 if [ ! -s "${LOCAL_BACKUP_PATH}" ]; then
     /app/send_telegram.sh "❌ Backup file is empty, aborting"
     exit 1
 fi
 
+if ! gzip -t "${LOCAL_BACKUP_PATH}" 2>/dev/null; then
+    /app/send_telegram.sh "❌ Backup file is corrupted or not valid gzip"
+    exit 1
+fi
+
 echo "Uploading via rclone container..."
-if ! output=$(docker exec supabase-rclone rclone --config /config/rclone/rclone.conf \
-    copy "/backup/${BACKUP_FILENAME}" "dropbox:SupabaseServerBackups/${DATE_DIR}" 2>&1); then
-    /app/send_telegram.sh "⚠️ Upload failed for ${LOCAL_BACKUP_PATH}\n$output"
+if ! docker exec supabase-rclone rclone --config /config/rclone/rclone.conf \
+    copy "/backup/${BACKUP_FILENAME}" "dropbox:SupabaseServerBackups/${DATE_DIR}"; then
+    /app/send_telegram.sh "⚠️ Upload failed for ${LOCAL_BACKUP_PATH}"
     exit 1
 fi
 

@@ -373,7 +373,7 @@ services:
 
   auth:
     container_name: supabase-auth
-    image: supabase/gotrue:v2.180.0-rc.2
+    image: supabase/gotrue:v2.186.0-rc.7
     restart: unless-stopped
     healthcheck:
       test:
@@ -599,7 +599,7 @@ services:
 
   meta:
     container_name: supabase-meta
-    image: supabase/postgres-meta:v0.93.1
+    image: supabase/postgres-meta:v0.95.2
     restart: unless-stopped
     depends_on:
       db:
@@ -768,8 +768,8 @@ services:
   # Comment out everything below this point if you are using an external Postgres database
   db:
     container_name: supabase-db
-    image: supabase/postgres:15.8.1.060
-    #image: supabase/postgres:17.6.1.034
+    #image: supabase/postgres:15.8.1.060 
+    image: supabase/postgres:17.6.1.072
     restart: unless-stopped
     volumes:
       - ./volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
@@ -780,7 +780,7 @@ services:
       # Initialize the database settings with JWT_SECRET and JWT_EXP
       - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
       # PGDATA directory is persisted between restarts
-      - ./volumes/db/data:/var/lib/postgresql/data:Z
+      - ./volumes/db/data17:/var/lib/postgresql/data:Z
       # Changes required for internal supabase data such as _analytics
       - ./volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z
       # Changes required for Analytics support
@@ -788,7 +788,7 @@ services:
       # Changes required for Pooler support
       - ./volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z
       # Use named volume to persist pgsodium decryption key between restarts
-      - db-config:/etc/postgresql-custom
+      - db-config:/etc/postgresql-custom-new
     healthcheck:
       test:
         [
@@ -824,57 +824,6 @@ services:
         "log_min_messages=notice" # prevents Realtime polling queries from appearing in logs
       ]
 
-  db17:
-    container_name: supabase-db17
-    image: supabase/postgres:17.6.1.034
-    profiles: ["disabled"]
-    restart: unless-stopped
-    volumes:
-          - ./volumes/db/realtime.sql:/docker-entrypoint-initdb.d/migrations/99-realtime.sql:Z
-          # Must be superuser to create event trigger
-          - ./volumes/db/webhooks.sql:/docker-entrypoint-initdb.d/init-scripts/98-webhooks.sql:Z
-          # Must be superuser to alter reserved role
-          - ./volumes/db/roles.sql:/docker-entrypoint-initdb.d/init-scripts/99-roles.sql:Z
-          # Initialize the database settings with JWT_SECRET and JWT_EXP
-          - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
-          # PGDATA directory is persisted between restarts
-          - ./volumes/db/data17:/var/lib/postgresql/data:Z
-          # Changes required for internal supabase data such as _analytics
-          - ./volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z
-          # Changes required for Analytics support
-          - ./volumes/db/logs.sql:/docker-entrypoint-initdb.d/migrations/99-logs.sql:Z
-          # Changes required for Pooler support
-          - ./volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z
-          # Use named volume to persist pgsodium decryption key between restarts
-          - db-config:/etc/postgresql-custom17
-    environment:
-      POSTGRES_HOST: /var/run/postgresql
-      PGPORT: ${POSTGRES_PORT}
-      POSTGRES_PORT: ${POSTGRES_PORT}
-      PGPASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      PGDATABASE: ${POSTGRES_DB}
-      POSTGRES_DB: ${POSTGRES_DB}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXP: ${JWT_EXPIRY}
-      
-
-    healthcheck:
-      test: ["CMD","pg_isready","-U","postgres","-h","localhost"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    command:
-      [
-        "postgres",
-        "-c",
-        "config_file=/etc/postgresql/postgresql.conf",
-        "-c",
-        "log_min_messages=notice" # prevents Realtime polling queries from appearing in logs
-      ]
-
-      
-
   vector:
       container_name: supabase-vector
       image: timberio/vector:0.28.1-alpine
@@ -908,7 +857,7 @@ services:
   # Update the DATABASE_URL if you are using an external Postgres database
   supavisor:
     container_name: supabase-pooler
-    image: supabase/supavisor:2.7.3
+    image: supabase/supavisor:2.7.4
     restart: unless-stopped
     ports:
       - ${POSTGRES_PORT}:5432
