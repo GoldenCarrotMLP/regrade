@@ -2,12 +2,15 @@
 -- PostgreSQL database dump
 --
 
--- Dumped from database version 15.8
--- Dumped by pg_dump version 15.8
+\restrict PghpkJWjbNZCNexMFdjYVmClY790Cn3LgM0AOc43T2ku4O3cDCSbCzvIjF3IgZP
+
+-- Dumped from database version 17.6
+-- Dumped by pg_dump version 17.6
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SELECT pg_catalog.set_config('search_path', '', false);
@@ -38,6 +41,30 @@ CREATE TYPE public.http_response_with_headers AS (
 	content text,
 	headers text
 );
+
+
+--
+-- Name: adjust_created_at_on_unpause(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.adjust_created_at_on_unpause() RETURNS trigger
+    LANGUAGE plpgsql
+    SET search_path TO ''
+    AS $$
+BEGIN
+  -- If transitioning out of pause (status_id 3 → something else)
+  IF OLD.status_id = 3 AND NEW.status_id <> 3 THEN
+    IF OLD.pause IS NOT NULL THEN
+      -- Offset created_at backwards by the pause duration
+      NEW.created_at := NEW.created_at - (CURRENT_TIMESTAMP - OLD.pause);
+      -- Clear pause timestamp
+      NEW.pause := NULL;
+    END IF;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
 
 
 --
@@ -1034,6 +1061,52 @@ BEGIN
 
     RETURN NEW;
 END;
+$$;
+
+
+--
+-- Name: find_repair_job_for_phone(bigint, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.find_repair_job_for_phone(technician_id_param bigint, imei_param text) RETURNS bigint
+    LANGUAGE sql
+    SET search_path TO ''
+    AS $$
+WITH phone_prev AS (
+  -- Step A: find the previous job bucket for this phone
+  SELECT rj.id AS prev_job_id
+  FROM public.repair_jobs rj
+  JOIN public.jobs_assigned ja ON ja.repair_jobs_id = rj.id
+  JOIN public.repairs rp ON rp.repair_job_id = rj.id
+  JOIN public.phones p ON p.id = rp.phone_id
+  WHERE ja.job_id = 20
+    AND p.imei = imei_param
+    AND p.is_active = true
+  LIMIT 1
+)
+-- Step B: find technician’s active repair job with job_id=74
+-- AND ensure it matches the same previous job bucket
+SELECT rj.id
+FROM public.repair_jobs rj
+JOIN public.jobs_assigned ja ON ja.repair_jobs_id = rj.id
+JOIN public.repairs rp ON rp.repair_job_id = rj.id
+JOIN public.phones p ON p.id = rp.phone_id
+JOIN phone_prev pp ON TRUE
+WHERE rj.technician = technician_id_param
+  AND rj.status_id = 1
+  AND ja.job_id = 74
+  AND EXISTS (
+    SELECT 1
+    FROM public.repairs rp2
+    JOIN public.phones ph2 ON ph2.id = rp2.phone_id
+    JOIN public.repairs rp_prev ON rp_prev.phone_id = ph2.id
+    JOIN public.repair_jobs prev ON prev.id = rp_prev.repair_job_id
+    JOIN public.jobs_assigned ja_prev ON ja_prev.repair_jobs_id = prev.id
+    WHERE rp2.repair_job_id = rj.id
+      AND ja_prev.job_id = 20
+      AND prev.id = pp.prev_job_id
+  )
+LIMIT 1;
 $$;
 
 
@@ -3032,26 +3105,20 @@ BEGIN
             o.tag,
             o.id AS order_id,
 
-            -- Extract parent order JSON
+            -- Extract parent order JSON using parent_id
             (
-  SELECT to_jsonb(po) || jsonb_build_object(
-    'jobs',
-    (
-      SELECT jsonb_agg(eoj.name)
-      FROM public.orders_jobs oj
-      JOIN public.enum_order_jobs eoj ON oj.job_id = eoj.id
-      WHERE oj.order_id = po.id
-    )
-  )
-  FROM public.orders po
-  WHERE po.id = (
-    CASE 
-      WHEN o.tag ~ '#[0-9]+' 
-      THEN (regexp_replace(o.tag, '.*#([0-9]+).*', '\1'))::bigint
-      ELSE NULL
-    END
-  )
-) AS parent_order
+              SELECT to_jsonb(po) || jsonb_build_object(
+                'jobs',
+                (
+                  SELECT jsonb_agg(eoj.name)
+                  FROM public.orders_jobs oj
+                  JOIN public.enum_order_jobs eoj ON oj.job_id = eoj.id
+                  WHERE oj.order_id = po.id
+                )
+              )
+              FROM public.orders po
+              WHERE po.id = o.parent_id
+            ) AS parent_order
 
         FROM public.phones p
         LEFT JOIN public.enum_models em
@@ -3073,6 +3140,77 @@ BEGIN
 
     RETURN result;
 END;
+$$;
+
+
+--
+-- Name: get_repair_jobs_with_previous(bigint); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.get_repair_jobs_with_previous(target_job_id bigint) RETURNS SETOF jsonb
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+  SELECT jsonb_build_object(
+    'id', rj.id,
+    'status_id', rj.status_id,
+    'job', (
+      SELECT jsonb_agg(ej.name)
+      FROM public.jobs_assigned ja
+      JOIN public.enum_jobs ej ON ej.id = ja.job_id
+      WHERE ja.repair_jobs_id = rj.id
+    ),
+    'name', tech.name,
+    'repairs', (
+      SELECT jsonb_agg(rp.phone_id ORDER BY rp.id DESC)
+      FROM public.repairs rp
+      WHERE rp.repair_job_id = rj.id
+    ),
+    'status', es.name,
+    'previous_jobs', (
+      SELECT coalesce(
+        jsonb_agg(
+          jsonb_build_object(
+            'id', prev.id,
+            'jobs', (
+              SELECT jsonb_agg(ej2.name)
+              FROM public.jobs_assigned ja2
+              JOIN public.enum_jobs ej2 ON ej2.id = ja2.job_id
+              WHERE ja2.repair_jobs_id = prev.id
+            ),
+            'repairs', (
+              SELECT jsonb_agg(rp2.phone_id ORDER BY rp2.id DESC)
+              FROM public.repairs rp2
+              WHERE rp2.repair_job_id = prev.id
+            )
+          )
+          ORDER BY prev.id
+        ), '[]'::jsonb
+      )
+      FROM (
+        SELECT DISTINCT prev.id
+        FROM public.repairs rp
+        JOIN public.phones ph ON ph.id = rp.phone_id
+        JOIN public.repairs rp_prev ON rp_prev.phone_id = ph.id
+        JOIN public.repair_jobs prev ON prev.id = rp_prev.repair_job_id
+        JOIN public.jobs_assigned ja_prev ON ja_prev.repair_jobs_id = prev.id
+        WHERE rp.repair_job_id = rj.id
+          AND ph.is_active = true
+          AND ja_prev.job_id = 20
+      ) uniq_prev
+      JOIN public.repair_jobs prev ON prev.id = uniq_prev.id
+    )
+  )
+  FROM public.repair_jobs rj
+  JOIN public.technicians tech ON tech.id = rj.technician
+  JOIN public.enum_status es ON es.id = rj.status_id
+  WHERE rj.status_id <> 4
+    AND EXISTS (
+      SELECT 1
+      FROM public.jobs_assigned ja
+      WHERE ja.repair_jobs_id = rj.id
+        AND ja.job_id = target_job_id
+    );
 $$;
 
 
@@ -5789,6 +5927,53 @@ $$;
 
 
 --
+-- Name: upsert_repair_job_for_phone(bigint, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.upsert_repair_job_for_phone(technician_id_param bigint, imei_param text) RETURNS bigint
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO ''
+    AS $$
+DECLARE
+    v_repair_job_id bigint;
+    v_phone_id bigint;
+BEGIN
+    -- Step 1: Try to find an existing repair job using the helper function
+    SELECT public.find_repair_job_for_phone(technician_id_param, imei_param)
+    INTO v_repair_job_id;
+
+    -- Step 2: If not found, create a new repair job and assign job_id=74
+    IF v_repair_job_id IS NULL THEN
+        INSERT INTO public.repair_jobs (technician, order_id)
+        VALUES (technician_id_param, NULL)
+        RETURNING id INTO v_repair_job_id;
+
+        INSERT INTO public.jobs_assigned (repair_jobs_id, job_id)
+        VALUES (v_repair_job_id, 74);
+    END IF;
+
+    -- Step 3: Look up the phone by IMEI, must be active
+    SELECT id INTO v_phone_id
+    FROM public.phones
+    WHERE imei = imei_param
+      AND is_active = true
+    LIMIT 1;
+
+    IF v_phone_id IS NULL THEN
+        RAISE EXCEPTION 'No active phone found with IMEI %', imei_param;
+    END IF;
+
+    -- Step 4: Insert into repairs (ignore duplicates)
+    INSERT INTO public.repairs (repair_job_id, phone_id)
+    VALUES (v_repair_job_id, v_phone_id)
+    ON CONFLICT (phone_id, repair_job_id) DO NOTHING;
+
+    RETURN v_repair_job_id;
+END;
+$$;
+
+
+--
 -- Name: user_in_channel(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5825,33 +6010,6 @@ CREATE TABLE public."TAC_database" (
     "jsonExtraFull" text,
     model_id bigint,
     CONSTRAINT "TAC_database_tac_number_check" CHECK ((length(tac_number) = 8))
-);
-
-
---
--- Name: audit_log; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.audit_log (
-    id bigint NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    editor_uid uuid DEFAULT auth.uid(),
-    table_name text,
-    changes_jsonb jsonb
-);
-
-
---
--- Name: audit_log_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-ALTER TABLE public.audit_log ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
-    SEQUENCE NAME public.audit_log_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
 );
 
 
@@ -5990,7 +6148,6 @@ CREATE TABLE public.enum_jobs (
     id bigint NOT NULL,
     name text NOT NULL,
     role bigint DEFAULT '7'::bigint,
-    goal smallint,
     points real,
     next_job bigint[]
 );
@@ -6111,44 +6268,6 @@ CREATE TABLE public.jobs_assigned (
 
 ALTER TABLE public.jobs_assigned ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
     SEQUENCE NAME public.jobs_assigned_id_seq
-    START WITH 1
-    INCREMENT BY 1
-    NO MINVALUE
-    NO MAXVALUE
-    CACHE 1
-);
-
-
---
--- Name: logs; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.logs (
-    id bigint NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    table_name text,
-    filter text,
-    rows_returned numeric,
-    "time" numeric,
-    requester uuid DEFAULT auth.uid(),
-    db_time numeric NOT NULL,
-    serialize_time numeric NOT NULL,
-    api_time numeric NOT NULL,
-    client_time numeric NOT NULL,
-    dns_time numeric,
-    tcp_time numeric,
-    tls_time numeric,
-    ttfb numeric,
-    download_time numeric
-);
-
-
---
--- Name: logs_id_seq; Type: SEQUENCE; Schema: public; Owner: -
---
-
-ALTER TABLE public.logs ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
-    SEQUENCE NAME public.logs_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -6958,14 +7077,6 @@ ALTER TABLE ONLY public."TAC_database"
 
 
 --
--- Name: audit_log audit_log_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.audit_log
-    ADD CONSTRAINT audit_log_pkey PRIMARY KEY (id);
-
-
---
 -- Name: channel_members channel_members_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7163,14 +7274,6 @@ ALTER TABLE ONLY public.enum_jobs
 
 ALTER TABLE ONLY public.logs_metric
     ADD CONSTRAINT logs_metric_pkey PRIMARY KEY (id);
-
-
---
--- Name: logs logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.logs
-    ADD CONSTRAINT logs_pkey PRIMARY KEY (id);
 
 
 --
@@ -7580,6 +7683,13 @@ CREATE INDEX idx_phone_jobs_done_done_id ON public.phone_jobs_done USING btree (
 
 
 --
+-- Name: idx_phone_jobs_done_logs_phone_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_phone_jobs_done_logs_phone_id ON public.phone_jobs_done_logs USING btree (phone_id);
+
+
+--
 -- Name: idx_phone_jobs_done_phone_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7853,6 +7963,13 @@ CREATE UNIQUE INDEX phone_grades_unique_grade_phone ON public.phone_grades USING
 
 
 --
+-- Name: phone_jobs_done_created_at_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX phone_jobs_done_created_at_idx ON public.phone_jobs_done USING btree (created_at);
+
+
+--
 -- Name: phone_update_log_new_order_id_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -7906,6 +8023,13 @@ CREATE INDEX phones_model_id_idx ON public.phones USING btree (model_id);
 --
 
 CREATE INDEX phones_order_id_idx ON public.phones USING btree (order_id);
+
+
+--
+-- Name: phones_sent_out_date_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX phones_sent_out_date_idx ON public.phones USING btree (sent_out_date);
 
 
 --
@@ -8102,6 +8226,13 @@ CREATE TRIGGER repair_jobs_audit_trigger BEFORE INSERT OR UPDATE ON public.repai
 --
 
 CREATE TRIGGER repair_jobs_status_trigger BEFORE INSERT OR UPDATE ON public.repair_jobs FOR EACH ROW EXECUTE FUNCTION public.update_repair_jobs_status();
+
+
+--
+-- Name: repair_jobs repair_jobs_unpause_trigger; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER repair_jobs_unpause_trigger BEFORE UPDATE ON public.repair_jobs FOR EACH ROW EXECUTE FUNCTION public.adjust_created_at_on_unpause();
 
 
 --
@@ -8309,14 +8440,6 @@ ALTER TABLE ONLY public."TAC_database"
 
 
 --
--- Name: audit_log audit_log_editor_uid_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.audit_log
-    ADD CONSTRAINT audit_log_editor_uid_fkey FOREIGN KEY (editor_uid) REFERENCES public.technicians(uuid);
-
-
---
 -- Name: channel_members channel_members_channel_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8418,14 +8541,6 @@ ALTER TABLE ONLY public.jobs_assigned
 
 ALTER TABLE ONLY public.jobs_assigned
     ADD CONSTRAINT jobs_assigned_repair_jobs_id_fkey FOREIGN KEY (repair_jobs_id) REFERENCES public.repair_jobs(id) ON DELETE CASCADE;
-
-
---
--- Name: logs logs_requester_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.logs
-    ADD CONSTRAINT logs_requester_fkey FOREIGN KEY (requester) REFERENCES public.technicians(uuid);
 
 
 --
@@ -8937,13 +9052,6 @@ CREATE POLICY "Enable delete for users based on user_id" ON public.manual_summar
 
 
 --
--- Name: audit_log Enable insert for authenticated users only; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Enable insert for authenticated users only" ON public.audit_log TO authenticated USING (true);
-
-
---
 -- Name: channels Enable insert for authenticated users only; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -9100,13 +9208,6 @@ CREATE POLICY "Enable read access for all users" ON public.enum_status FOR SELEC
 
 
 --
--- Name: logs Enable read access for all users; Type: POLICY; Schema: public; Owner: -
---
-
-CREATE POLICY "Enable read access for all users" ON public.logs TO authenticated USING (true);
-
-
---
 -- Name: logs_metric Enable read access for all users; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -9252,12 +9353,6 @@ CREATE POLICY "allow access to authenticated" ON public.outside_repairs TO authe
 
 
 --
--- Name: audit_log; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
-
---
 -- Name: channel_members; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -9346,12 +9441,6 @@ ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.jobs_assigned ENABLE ROW LEVEL SECURITY;
-
---
--- Name: logs; Type: ROW SECURITY; Schema: public; Owner: -
---
-
-ALTER TABLE public.logs ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: logs_metric; Type: ROW SECURITY; Schema: public; Owner: -
@@ -9525,4 +9614,6 @@ ALTER TABLE public.timesheet ENABLE ROW LEVEL SECURITY;
 --
 -- PostgreSQL database dump complete
 --
+
+\unrestrict PghpkJWjbNZCNexMFdjYVmClY790Cn3LgM0AOc43T2ku4O3cDCSbCzvIjF3IgZP
 
