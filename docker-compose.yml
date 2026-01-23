@@ -33,7 +33,7 @@ services:
     image: rclone/rclone:sha-a3ccf4d   # pinned digest
     container_name: supabase-rclone
     volumes:
-      - /root/.config/rclone/rclone.conf:/config/rclone/rclone.conf:ro
+      - ./volumes/rclone:/config/rclone
       - ./backup:/backup
 
     command: tail -f /dev/null   # keep container running
@@ -279,7 +279,7 @@ services:
     restart: unless-stopped
     volumes:
       - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro
-      - ~/.config/rclone/rclone.conf:/tmp/rclone.conf:ro
+      - ./volumes/rclone:/config/rclone
       - ./volumes/db/snippets:/app/supabase/snippets:Z
     develop:
       watch:
@@ -317,8 +317,8 @@ services:
       SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
       AUTH_JWT_SECRET: ${JWT_SECRET}
 
-      RCLONE_REMOTE: dropbox
-      RCLONE_BASE_DIR: SupabaseServerBackups
+      RCLONE_REMOTE: ${RCLONE_REMOTE}
+      RCLONE_BASE_DIR: ${RCLONE_BASE_DIR}
 
 
       LOGFLARE_PRIVATE_ACCESS_TOKEN: ${LOGFLARE_PRIVATE_ACCESS_TOKEN}

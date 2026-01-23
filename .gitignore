@@ -3,7 +3,7 @@ volumes/db/data/
 volumes/db/data17/
 volumes/db/data.*
 volumes/storage/
-
+volumes/rclone/
 .env
 backup/cron.log
 dns-capture.log

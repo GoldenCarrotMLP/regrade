@@ -5,9 +5,9 @@ set -o pipefail
 # Global trap: catch any uncaught error
 trap 'err=$?; /app/send_telegram.sh "❌ Backup script error (exit $err) at $(date)"' ERR
 
-DOCKER_CONTAINER="supabase-db"
-POSTGRES_USER="supabase_admin"
-DATABASE_NAME="postgres"
+DOCKER_CONTAINER=${DOCKER_CONTAINER:-supabase-db}
+POSTGRES_USER=${POSTGRES_USER:-supabase_admin}
+DATABASE_NAME=${DATABASE_NAME:-postgres}
 
 DATE_DIR=$(date +%Y-%m-%d)
 TIMESTAMP=$(date +"%H-%M-%p")
