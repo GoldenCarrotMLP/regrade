@@ -273,12 +273,12 @@ services:
       context: ./apps/supabase
       dockerfile: apps/studio/Dockerfile
       #target: dev 
-    #command: ["sh","-c","mkdir -p /root/.config/rclone && cp /tmp/rclone.conf /root/.config/rclone/rclone.conf && pnpm dev:studio"]
-    command: ["sh","-c","mkdir -p /root/.config/rclone && cp /tmp/rclone.conf /root/.config/rclone/rclone.conf && node apps/studio/server.js"]
-    
+    #command: ["sh","-c","pnpm dev:studio"]
+     
     restart: unless-stopped
     volumes:
       - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro
+      # This mounts your local ./volumes/rclone to /config/rclone inside the container
       - ./volumes/rclone:/config/rclone
       - ./volumes/db/snippets:/app/supabase/snippets:Z
     develop:
