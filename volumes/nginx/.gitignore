@@ -13,15 +13,16 @@
 # -----------------------------
 # Keep fallback certs (required for first boot)
 # -----------------------------
-!ssl/
+!ssl
 !ssl/fallback.fullchain.pem
 !ssl/fallback.privkey.pem
 !ssl/update-certs.sh
 
 # Ignore real Let's Encrypt certs
-ssl/*.pem
-!ssl/fallback.fullchain.pem
-!ssl/fallback.privkey.pem
+!letsencrypt
+!letsencrypt/bootstrap-certbot.sh
+!letsencrypt/ssl-dhparams.pem
+!letsencrypt/options-ssl-nginx.conf
 
 # -----------------------------
 # Keep certbot-www directory structure
