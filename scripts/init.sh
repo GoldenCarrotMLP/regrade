@@ -30,8 +30,9 @@ if ! findmnt -o PROPAGATION / | grep -q shared; then
   sudo mount --make-rshared /
 fi
 
-TEMPLATE="/.env.example"
-OUTPUT="/.env"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+TEMPLATE="$SCRIPT_DIR/../.env.example"
+OUTPUT="$SCRIPT_DIR/../.env"
 
 # --- Check if docker compose is installed ---
 if ! command -v docker-compose >/dev/null 2>&1 && ! docker compose version >/dev/null 2>&1; then

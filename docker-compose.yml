@@ -194,9 +194,7 @@ services:
       # These will override what's in your .env file for the container
       NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
-      NEXT_PUBLIC_DEV_ONLY_SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
-      NEXT_PUBLIC_GEMINI_API_KEY: ${GEMINI_API_KEY}
 
       # It's better to pass other secrets via the environment section
       # rather than copying the .env file into the image.
