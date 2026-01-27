@@ -133,6 +133,7 @@ sed \
   -e "s/{VAULT_ENC_KEY_PLACEHOLDER}/$VAULT_ENC_KEY/" \
   -e "s/{SITE_URL_PLACEHOLDER || http:\/\/localhost:3000}/http:\/\/$DOMAIN:3000/" \
   -e "s/{API_EXTERNAL_URL_PLACEHOLDER || http:\/\/localhost:8000}/http:\/\/$DOMAIN:8000/" \
+  -e "s/{SUPABASE_PUBLIC_URL || http:\/\/localhost:8000}/http:\/\/$DOMAIN:8000/" \
   -e "s/{DOMAIN_PLACEHOLDER || localhost}/$DOMAIN/" \
   -e "s/{SMTP_PASSWORD_PLACEHOLDER}/$SMTP_PASSWORD/" \
   -e "s/{OpenAI_API_KEY_PLACEHOLDER}/$OPENAI_API_KEY/" \

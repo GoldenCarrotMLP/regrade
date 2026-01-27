@@ -110,7 +110,7 @@ services:
       SSL_KEY_PATH: ${SSL_KEY_PATH}
       DMS_MAILBOX_FORMAT: maildir
       POSTFIX_INET_PROTOCOLS: ipv4
-      DMS_AUTO_MAILBOX: auth@regrade.net
+      DMS_AUTO_MAILBOX: ${SMTP_USER}
       DMS_AUTO_PASSWORD: ${SMTP_PASS}
 
     cap_add:
@@ -172,32 +172,19 @@ services:
 
   web:
     container_name: regrade-web
-    
     #image: tuplasma/regrade-web:6b969b6
 
     build:
       context: ./apps/regrade
-      # CHANGE THIS: Now that the context is the app folder, the Dockerfile is at the root
       dockerfile: Dockerfile
-      # To run in development mode, uncomment the following line:
       target: production
     restart: unless-stopped
-    ports:
-      # For production, Next.js standalone runs on port 3000  docker compose exec -it web bash
-      # For development, your `dev` script runs on port 3001  ls node_modules/@reduxjs/toolkit/dist
-      - "3000:3000" # For dev mode (npm run dev)
-      #- "3000:3000" # For production
     
     environment:
       NODE_ENV: production
-      # You can add your NEXT_PUBLIC_ variables here 
-      # These will override what's in your .env file for the container
-      NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
+      NEXT_PUBLIC_SUPABASE_URL: ${API_EXTERNAL_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
-      SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
 
-      # It's better to pass other secrets via the environment section
-      # rather than copying the .env file into the image.
     depends_on:
       - kong
     healthcheck:
@@ -217,13 +204,13 @@ services:
 
     restart: unless-stopped
 
-    ports:
-      - "5000:5000"
+    #ports:
+      #- "5000:5000"
 
     environment:
       NODE_ENV: production
 
-      SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
+      SUPABASE_URL: ${API_EXTERNAL_URL}
       SUPABASE_ANON_KEY: ${ANON_KEY}
 
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
@@ -244,14 +231,14 @@ services:
       dockerfile: Dockerfile
       target: dev   # <-- use the new dev stage
     restart: unless-stopped
-    ports:
-      - "3001:3001"
+    #ports:
+      #- "3001:3001"
     volumes:
       - ./apps/regrade:/app
       - /app/node_modules   # prevent overwriting node_modules inside container
     environment:
       NODE_ENV: development
-      NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_PUBLIC_URL}
+      NEXT_PUBLIC_SUPABASE_URL: ${API_EXTERNAL_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
       NEXT_PUBLIC_DEV_ONLY_SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
@@ -263,6 +250,41 @@ services:
       retries: 3
       start_period: 20s  
     #command: ["sh", "-c", "pnpm run webpack"]
+
+  authelia:
+    image: authelia/authelia:latest  
+    container_name: authelia    
+    restart: unless-stopped  
+    volumes:  
+      - ./volumes/authelia/config:/config
+      - ./volumes/authelia/config_:/tmp  
+  
+    command: ["sh","-c","cd .. && ./tmp/init.sh"]  
+    environment:  
+      TZ: "America/New_York"  
+  
+      DOMAIN: ${DOMAIN}  
+      AUTHELIA_DOMAIN: ${AUTHELIA_DOMAIN}  
+      SUPABASE_STUDIO_DOMAIN: ${SUPABASE_STUDIO_DOMAIN}  
+      DASHBOARD_USERNAME: ${DASHBOARD_USERNAME}  
+      DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD}  
+      DASHBOARD_EMAIL: ${DASHBOARD_EMAIL}  
+  
+      AUTHELIA_ENCRYPTION_KEY: ${AUTHELIA_ENCRYPTION_KEY}  
+      AUTHELIA_SESSION_SECRET: ${AUTHELIA_SESSION_SECRET}  
+      JWT_SECRET: ${JWT_SECRET}  
+        
+      # SMTP Configuration (same as GoTrue)  
+      SMTP_HOST: ${SMTP_HOST}  
+      SMTP_PORT: ${SMTP_PORT}  
+      SMTP_USER: ${SMTP_USER}  
+      SMTP_PASS: ${SMTP_PASS}  
+      SMTP_SENDER_NAME: ${SMTP_SENDER_NAME}  
+        
+    #ports:  
+      #- "9091:9091"  
+    networks:  
+      - default
 
   studio:
     container_name: supabase-studio
@@ -310,7 +332,7 @@ services:
       DEFAULT_PROJECT_NAME: ${STUDIO_DEFAULT_PROJECT}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY}
-      SUPABASE_PUBLIC_URL: ${SUPABASE_PUBLIC_URL}
+      SUPABASE_PUBLIC_URL: https://${SUPABASE_STUDIO_DOMAIN}
       SUPABASE_ANON_KEY: ${ANON_KEY}
       SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
       AUTH_JWT_SECRET: ${JWT_SECRET}
@@ -334,9 +356,9 @@ services:
     container_name: supabase-kong
     image: kong:2.8.1
     restart: unless-stopped
-    ports:
-      - ${KONG_HTTP_PORT}:8000/tcp
-      - ${KONG_HTTPS_PORT}:8443/tcp
+    #ports:
+      #- ${KONG_HTTP_PORT}:8000/tcp
+      #- ${KONG_HTTPS_PORT}:8443/tcp
     volumes:
       # https://github.com/supabase/supabase/issues/12661
       - ./volumes/api/kong.yml:/home/kong/temp.yml:ro,z
@@ -704,8 +726,8 @@ services:
     pid: host  
     volumes:  
       - '/:/host:ro,rslave'  
-    ports:  
-      - "9100:9100"  
+    #ports:  
+      #- "9100:9100"  
     networks:  
       - default
     healthcheck:
@@ -720,8 +742,8 @@ services:
     container_name: supabase-prometheus  
     image: prom/prometheus:latest  
     restart: unless-stopped  
-    ports:  
-      - "9090:9090"  
+    #ports:  
+      #- "9090:9090"  
     volumes:  
       - ./volumes/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro  
       - prometheus-data:/prometheus  
@@ -754,8 +776,8 @@ services:
         condition: service_healthy  
     environment:  
       DATA_SOURCE_NAME: "postgresql://supabase_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable"  
-    ports:  
-      - "9187:9187"
+    #ports:  
+      #- "9187:9187"
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:9187/metrics || exit 1"]
       interval: 30s
@@ -858,9 +880,9 @@ services:
     container_name: supabase-pooler
     image: supabase/supavisor:2.7.4
     restart: unless-stopped
-    ports:
-      - ${POSTGRES_PORT}:5432
-      - ${POOLER_PROXY_PORT_TRANSACTION}:6543
+    #ports:
+      #- ${POSTGRES_PORT}:5432
+      #- ${POOLER_PROXY_PORT_TRANSACTION}:6543
     volumes:
       - ./volumes/pooler/pooler.exs:/etc/pooler/pooler.exs:ro,z
     healthcheck:

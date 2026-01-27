@@ -1,0 +1,46 @@
+server:  
+  address: 'tcp://:9091'  
+  
+log:  
+  level: info  
+  
+identity_validation:  
+  reset_password:  
+    jwt_secret: "{{JWT_SECRET}}"  
+  
+authentication_backend:  
+  file:  
+    path: /config/users.yml
+    watch: true  
+  
+session:  
+  name: authelia_session  
+  secret: "{{AUTHELIA_SESSION_SECRET}}"  
+  expiration: 3600  
+  inactivity: 300  
+  remember_me: 1M  
+  cookies:  
+    - domain: "{{DOMAIN}}"  
+      authelia_url: "https://{{AUTHELIA_DOMAIN}}"  
+      default_redirection_url: "https://{{SUPABASE_STUDIO_DOMAIN}}"  
+  
+storage:  
+  local:  
+    path: /config/db.sqlite3  
+  encryption_key: "{{AUTHELIA_ENCRYPTION_KEY}}"  
+  
+notifier:  
+  smtp:  
+    address: 'smtp://{{SMTP_HOST}}:{{SMTP_PORT}}'  
+    username: '{{SMTP_USER}}'  
+    password: '{{SMTP_PASS}}'  
+    sender: '{{SMTP_SENDER_NAME}} <{{SMTP_USER}}>'  
+    identifier: '{{AUTHELIA_DOMAIN}}'  
+    subject: '[Authelia] {title}'  
+    startup_check_address: '{{SMTP_USER}}'  
+  
+access_control:  
+  default_policy: deny  
+  rules:  
+    - domain: "{{SUPABASE_STUDIO_DOMAIN}}"  
+      policy: two_factor

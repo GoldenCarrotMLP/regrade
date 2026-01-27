@@ -4,6 +4,7 @@ volumes/db/data17/
 volumes/db/data.*
 volumes/storage/
 volumes/rclone/
+volumes/authelia/config
 .env
 backup/cron.log
 dns-capture.log
@@ -57,3 +58,4 @@ Thumbs.db
 
 resolved_ips.txt
 dump.txt
+
