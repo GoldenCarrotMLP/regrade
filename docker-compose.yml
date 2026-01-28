@@ -1,10 +1,3 @@
-# Usage
-#   Start:              docker compose up
-#   With helpers:       docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml up
-#   Stop:               docker compose down
-#   Destroy:            docker compose -f docker-compose.yml -f ./dev/docker-compose.dev.yml down -v --remove-orphans
-#   Reset everything:  ./reset.sha
-
 name: supabase
 services:
 
@@ -172,7 +165,7 @@ services:
 
   web:
     container_name: regrade-web
-    #image: tuplasma/regrade-web:6b969b6
+    #image: tuplasma/regrade-web:latest
 
     build:
       context: ./apps/regrade
@@ -789,7 +782,6 @@ services:
   # Comment out everything below this point if you are using an external Postgres database
   db:
     container_name: supabase-db
-    #image: supabase/postgres:15.8.1.060 
     image: supabase/postgres:17.6.1.072
     restart: unless-stopped
     volumes:
