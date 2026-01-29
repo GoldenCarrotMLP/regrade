@@ -2,6 +2,7 @@ studio.tar
 volumes/db/data/
 volumes/db/data17/
 volumes/db/data.*
+volumes/db/snippets
 volumes/storage/
 volumes/rclone/
 volumes/authelia/config
@@ -59,3 +60,4 @@ Thumbs.db
 resolved_ips.txt
 dump.txt
 
+apps/watchdog/dump-files.mjs
