@@ -1,0 +1,44 @@
+server {
+    server_name {SITE_DOMAIN};
+
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+
+    listen 443 quic;
+    listen [::]:443 quic;
+
+    # --- TLS settings ---
+    ssl_certificate     /etc/nginx/ssl/{SITE_DOMAIN}.fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/{SITE_DOMAIN}.privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    # --- HTTP/3 advertisement ---
+    add_header Alt-Svc 'h3=":443"; ma=86400' always;
+    add_header QUIC-Status "enabled" always;
+
+    ssl_early_data on;
+
+    # --- Docker DNS resolver (critical for dynamic upstreams) ---
+    resolver 127.0.0.11 ipv6=off valid=10s;
+    resolver_timeout 5s;
+
+    location / {
+        # Dynamic upstream (prevents startup crash)
+        set $web_upstream http://web:3000;
+        proxy_pass $web_upstream;
+
+        # Retry logic (prevents 502 if service is slow to start)
+        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        proxy_next_upstream_tries 3;
+
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+
+        # WebSocket proxying
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+}

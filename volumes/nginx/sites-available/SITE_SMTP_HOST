@@ -1,0 +1,41 @@
+server {
+    server_name {SITE_SMTP_HOST};
+
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+
+    listen 443 quic;
+    listen [::]:443 quic;
+
+    # --- TLS settings ---
+    ssl_certificate     /etc/nginx/ssl/{SITE_SMTP_HOST}.fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/{SITE_SMTP_HOST}.privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+    # --- HTTP/3 advertisement ---
+    add_header Alt-Svc 'h3=":443"; ma=86400';
+    add_header QUIC-Status "enabled" always;
+
+    # Recommended for QUIC
+    ssl_early_data on;
+
+} 
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {SITE_SMTP_HOST};
+
+    # Priority match for the Let's Encrypt challenge
+    location ^~ /.well-known/acme-challenge/ {
+        default_type "text/plain";
+        root /var/www/certbot;
+        allow all;
+    }
+
+    # Redirect all other HTTP traffic to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}

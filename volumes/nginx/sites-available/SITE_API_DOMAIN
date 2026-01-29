@@ -1,0 +1,94 @@
+# --- Port 443: HTTPS + HTTP/3 ---
+# --- Port 80: HTTP (Validation Only) ---
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {SITE_API_DOMAIN};
+
+    # Priority match for the Let's Encrypt challenge
+    location ^~ /.well-known/acme-challenge/ {
+        default_type "text/plain";
+        root /var/www/html;
+        allow all;
+    }
+
+    # Redirect all other HTTP traffic to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    server_name {SITE_API_DOMAIN};
+
+    # Modern syntax for enabling HTTP/2
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+
+    # HTTP/3 (QUIC) configuration
+    listen 443 quic reuseport;
+    listen [::]:443 quic reuseport;
+
+    ssl_certificate     /etc/nginx/ssl/{SITE_API_DOMAIN}.fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/{SITE_API_DOMAIN}.privkey.pem;
+
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
+
+    # Advertise HTTP/3 support
+    add_header Alt-Svc 'h3=":443"; ma=86400';
+
+    ssl_early_data on;
+
+    # --- Docker DNS resolver (critical for dynamic upstreams) ---
+    resolver 127.0.0.11 ipv6=off valid=10s;
+    resolver_timeout 5s;
+
+    # --- Let's Encrypt Challenge Path ---
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+        allow all;
+    }
+
+    # --- WebSocket endpoint for Realtime ---
+    location /realtime/v1/websocket {
+        # Dynamic upstream
+        set $kong_upstream http://kong:8000;
+        proxy_pass $kong_upstream;
+
+        # Retry logic
+        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        proxy_next_upstream_tries 3;
+
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400;
+        proxy_send_timeout 86400;
+    }
+
+    # --- Everything else goes to the API (Kong) ---
+    location / {
+        # Dynamic upstream
+        set $kong_upstream http://kong:8000;
+        proxy_pass $kong_upstream;
+
+        # Retry logic
+        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
+        proxy_next_upstream_tries 3;
+
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+
+        proxy_set_header   Host $host;
+        proxy_set_header   X-Real-IP $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+    }
+}

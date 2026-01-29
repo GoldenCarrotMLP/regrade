@@ -1,0 +1,71 @@
+server {  
+    server_name {SITE_SUPABASE_STUDIO_DOMAIN};  
+  
+    listen 443 ssl;  
+    listen [::]:443 ssl;  
+    http2 on;  
+  
+    # --- TLS settings ---  
+    ssl_certificate     /etc/nginx/ssl/{SITE_SUPABASE_STUDIO_DOMAIN}.fullchain.pem;  
+    ssl_certificate_key /etc/nginx/ssl/{SITE_SUPABASE_STUDIO_DOMAIN}.privkey.pem;  
+    include /etc/letsencrypt/options-ssl-nginx.conf;  
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;  
+  
+    # --- Docker DNS resolver ---  
+    resolver 127.0.0.11 ipv6=off valid=10s;  
+    resolver_timeout 5s;  
+  
+    # Upstream variables  
+    set $authelia_backend http://authelia:9091;  
+    set $studio_backend http://studio:3000;  
+  
+    # Virtual endpoint for Authelia authorization  
+    location /internal/authelia/authz {  
+        internal;  
+        proxy_pass $authelia_backend/api/authz/auth-request;  
+          
+        proxy_set_header X-Original-Method $request_method;  
+        proxy_set_header X-Original-URL $scheme://$http_host$request_uri;  
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  
+        proxy_set_header Content-Length "";  
+        proxy_set_header Connection "";  
+          
+        proxy_pass_request_body off;  
+        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503;  
+        proxy_next_upstream_tries 3;  
+    }  
+  
+    location / {  
+        # Authelia authorization check  
+        auth_request /internal/authelia/authz;  
+          
+        # Capture redirect URL from Authelia  
+        auth_request_set $redirection_url $upstream_http_location;  
+          
+        # Redirect to Authelia if unauthorized  
+        error_page 401 =302 $redirection_url;  
+          
+        # Capture user identity headers  
+        auth_request_set $user $upstream_http_remote_user;  
+        auth_request_set $groups $upstream_http_remote_groups;  
+        auth_request_set $name $upstream_http_remote_name;  
+        auth_request_set $email $upstream_http_remote_email;  
+          
+        # Forward identity headers to studio  
+        proxy_set_header Remote-User $user;  
+        proxy_set_header Remote-Groups $groups;  
+        proxy_set_header Remote-Name $name;  
+        proxy_set_header Remote-Email $email;  
+          
+        # Proxy to studio application  
+        proxy_pass $studio_backend;  
+          
+        proxy_set_header Host $host;  
+        proxy_set_header X-Real-IP $remote_addr;  
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;  
+        proxy_set_header X-Forwarded-Proto $scheme;  
+          
+        proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;  
+        proxy_next_upstream_tries 3;  
+    }  
+}

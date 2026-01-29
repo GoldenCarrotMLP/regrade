@@ -41,18 +41,29 @@ services:
     container_name: regrade-nginx
     image: macbre/nginx-http3:latest
     restart: unless-stopped
+    environment:
+      SITE_DOMAIN: ${DOMAIN}
+      SITE_DOMAINE: ${DOMAIN}
+      SITE_API_DOMAIN: ${API_DOMAIN}
+      SITE_SUPABASE_STUDIO_DOMAIN: ${SUPABASE_STUDIO_DOMAIN}
+      SITE_AUTHELIA_DOMAIN: ${AUTHELIA_DOMAIN}
+      SITE_SMTP_HOST: ${SMTP_HOST}
+      SITE_DEV_DOMAIN: ${DEV_DOMAIN}
+  
 
     volumes:
-      - ./volumes/nginx/sites-enabled:/etc/nginx/sites-enabled:ro
+      - ./volumes/nginx/sites-available:/etc/nginx/sites-available:ro
+      - ./volumes/nginx/sites-enabled:/etc/nginx/sites-enabled
       - ./volumes/nginx/letsencrypt:/etc/letsencrypt
       - ./volumes/nginx/certbot-www:/var/www/certbot
       - ./volumes/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./volumes/nginx/ssl:/etc/nginx/ssl
     user: root
     command: > 
-      sh -c " /etc/nginx/ssl/update-certs.sh && 
-      nginx -g 'daemon off;' 
-      "
+        sh -c "chmod +x /etc/nginx/ssl/init.sh &&
+        /etc/nginx/ssl/init.sh && 
+        nginx -g 'daemon off;' 
+        "
     ports:
       - "80:80"
       - "443:443/tcp"
@@ -175,7 +186,7 @@ services:
     
     environment:
       NODE_ENV: production
-      NEXT_PUBLIC_SUPABASE_URL: ${API_EXTERNAL_URL}
+      NEXT_PUBLIC_SUPABASE_URL: ${PROTOCOL}://${API_DOMAIN}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
 
     depends_on:
@@ -203,7 +214,7 @@ services:
     environment:
       NODE_ENV: production
 
-      SUPABASE_URL: ${API_EXTERNAL_URL}
+      SUPABASE_URL: ${PROTOCOL}://${API_DOMAIN}
       SUPABASE_ANON_KEY: ${ANON_KEY}
 
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
@@ -231,7 +242,7 @@ services:
       - /app/node_modules   # prevent overwriting node_modules inside container
     environment:
       NODE_ENV: development
-      NEXT_PUBLIC_SUPABASE_URL: ${API_EXTERNAL_URL}
+      NEXT_PUBLIC_SUPABASE_URL: ${PROTOCOL}://${API_DOMAIN}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
       NEXT_PUBLIC_DEV_ONLY_SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
@@ -411,12 +422,12 @@ services:
     environment:
       GOTRUE_API_HOST: 0.0.0.0
       GOTRUE_API_PORT: 9999
-      API_EXTERNAL_URL: ${API_EXTERNAL_URL}
+      API_EXTERNAL_URL: ${PROTOCOL}://${API_DOMAIN}
 
       GOTRUE_DB_DRIVER: postgres
       GOTRUE_DB_DATABASE_URL: postgres://supabase_auth_admin:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
 
-      GOTRUE_SITE_URL: ${SITE_URL}
+      GOTRUE_SITE_URL: ${PROTOCOL}://${DOMAIN}
       GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS}
       GOTRUE_MAILER_EXTERNAL_HOSTS: ${ADDITIONAL_REDIRECT_URLS}
       GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP}

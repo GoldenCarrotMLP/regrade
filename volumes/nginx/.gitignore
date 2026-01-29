@@ -7,8 +7,8 @@
 # -----------------------------
 # Keep Nginx config directories
 # -----------------------------
-!sites-enabled/
-!sites-enabled/**
+!sites-available/
+!sites-available/**
 
 # -----------------------------
 # Keep fallback certs (required for first boot)
@@ -17,6 +17,7 @@
 !ssl/fallback.fullchain.pem
 !ssl/fallback.privkey.pem
 !ssl/update-certs.sh
+!ssl/init.sh
 
 # Ignore real Let's Encrypt certs
 !letsencrypt
