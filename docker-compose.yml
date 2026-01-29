@@ -38,9 +38,11 @@ services:
       start_period: 10s
     entrypoint: ["sleep", "infinity"]
   nginx:
-    container_name: regrade-nginx
+    container_name: nginx
     image: macbre/nginx-http3:latest
     restart: unless-stopped
+    dns:
+      - 127.0.0.11
     environment:
       SITE_DOMAIN: ${DOMAIN}
       SITE_DOMAINE: ${DOMAIN}
@@ -87,7 +89,7 @@ services:
       - ./volumes/mail/data/mailstate:/var/mail-state
       - ./volumes/mail/config/maillogs:/var/log/mail
       - ./volumes/mail/config:/tmp/docker-mailserver
-      #- ./volumes/mail/config/10-init-mailbox.sh:/usr/local/bin/setup.d/10-init-mailbox.sh
+      - ./volumes/mail/config/10-init-mailbox.sh:/tmp/docker-mailserver/user-patches.sh
 
       - ./volumes/nginx/letsencrypt:/etc/letsencrypt:ro
 
@@ -175,11 +177,9 @@ services:
 
 
   web:
-    container_name: regrade-web
-    #image: tuplasma/regrade-web:latest
-
+    container_name: web
     build:
-      context: ./apps/regrade
+      context: ./apps/web
       dockerfile: Dockerfile
       target: production
     restart: unless-stopped
@@ -199,10 +199,10 @@ services:
       start_period: 20s
       
   webit:
-    container_name: regradeit-web
+    container_name: webit
 
     build:
-      context: ./apps/regradeit
+      context: ./apps/webit
       dockerfile: Dockerfile
       target: production
 
@@ -228,17 +228,17 @@ services:
 
 
   web-dev:
-    container_name: regrade-web-dev
+    container_name: web-dev
     profiles: ["dev"]
     build:
-      context: ./apps/regrade
+      context: ./apps/web
       dockerfile: Dockerfile
       target: dev   # <-- use the new dev stage
     restart: unless-stopped
     #ports:
       #- "3001:3001"
     volumes:
-      - ./apps/regrade:/app
+      - ./apps/web:/app
       - /app/node_modules   # prevent overwriting node_modules inside container
     environment:
       NODE_ENV: development

@@ -1,5 +1,5 @@
-[submodule "apps/regrade"]
-	path = apps/regrade
+[submodule "apps/web"]
+	path = apps/web
 	url = https://github.com/GoldenCarrotMLP/regrade-web
 	branch = main
 [submodule "apps/supabase"]
