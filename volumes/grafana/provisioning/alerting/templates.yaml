@@ -1,0 +1,16 @@
+apiVersion: 1  
+templates:  
+  - orgId: 1  
+    name: realtime-templates  
+    template: |  
+      {{ define "realtime.default.message" -}}  
+      {  
+        "messages": [  
+          {  
+            "topic": "alerts",  
+            "event": "{{ .CommonLabels.alertname }}",  
+            "payload": {"data": "{{ .CommonAnnotations.summary }}"}  
+          }  
+        ]  
+      }  
+      {{- end }}

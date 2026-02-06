@@ -12,6 +12,7 @@ while true; do
   MATCHES="$(printf '%s' "$LOGS" \
   | grep -iE "$PATTERNS" \
   | grep -vi 'terminating connection due to administrator command' \
+  | grep -vi 'the database system is starting up' \
   || true)"
 
   if [ -n "$MATCHES" ]; then

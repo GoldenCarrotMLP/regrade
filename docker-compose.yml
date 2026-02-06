@@ -9,9 +9,11 @@ services:
     volumes:
       - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro
       - ./backup:/app/backup
+      - ./volumes/watchdog:/app/log/
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
+      REDIS_HOST: redis
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "true"]
@@ -20,11 +22,16 @@ services:
       retries: 3
       start_period: 10s
     depends_on:
-      - rclone
+      db:
+        # Disable this if you are using an external Postgres database
+        condition: service_healthy
+      rclone:
+        condition: service_healthy
 
   rclone:
     image: rclone/rclone:sha-a3ccf4d   # pinned digest
     container_name: supabase-rclone
+    restart: unless-stopped
     volumes:
       - ./volumes/rclone:/config/rclone
       - ./backup:/backup
@@ -174,6 +181,9 @@ services:
       #NFT_WEB_SET: web_whitelist
     #cap_add:
       #- NET_ADMIN
+  redis:
+    image: redis:7
+    restart: unless-stopped
 
 
   web:
@@ -187,7 +197,9 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_SUPABASE_URL: ${PROTOCOL}://${API_DOMAIN}
+      PROMETHEUS_URL: http://prometheus:9090
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
+      REDIS_HOST: redis
 
     depends_on:
       - kong
@@ -197,7 +209,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 20s
-      
+    
   webit:
     container_name: webit
 
@@ -244,9 +256,10 @@ services:
       NODE_ENV: development
       NEXT_PUBLIC_SUPABASE_URL: ${PROTOCOL}://${API_DOMAIN}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${ANON_KEY}
-      NEXT_PUBLIC_DEV_ONLY_SUPABASE_SERVICE_KEY: ${SERVICE_ROLE_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
       NEXT_PUBLIC_GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GRAFANA_URL: http://grafana:3002
+      REDIS_HOST: redis
     healthcheck:
       test: ["CMD-SHELL", "bash -c '</dev/tcp/web-dev/3001' || exit 1"]
       interval: 30s
@@ -292,7 +305,7 @@ services:
 
   studio:
     container_name: supabase-studio
-    #image: supabase/studio:latest
+    image: supabase/studio:latest
     build:
       context: ./apps/supabase
       dockerfile: apps/studio/Dockerfile
@@ -536,6 +549,8 @@ services:
       timeout: 3s
       interval: 30s
       retries: 2
+    ports:
+      - 4001:4000
     environment:
       PORT: 4000
       DB_HOST: ${POSTGRES_HOST}
@@ -721,17 +736,69 @@ services:
       # GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID}
       # GOOGLE_PROJECT_NUMBER: ${GOOGLE_PROJECT_NUMBER}
   
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "3002:3000"
+    environment:
+      SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+      GF_SECURITY_ADMIN_USER: ${DASHBOARD_USERNAME}
+      GF_SECURITY_ADMIN_PASSWORD: ${DASHBOARD_PASSWORD}
+      GF_LIVE_ALLOWED_ORIGINS: "*"
+      GF_SERVER_ROOT_URL: /grafana/  
+      GF_SERVER_SERVE_FROM_SUB_PATH: false  
+      GF_SERVER_ENFORCE_DOMAIN: false  
+      GF_SECURITY_ALLOW_EMBEDDING: true
+
+      GF_LOG_LEVEL: debug  
+      GF_LOG_MODE: console file  
+      GF_LOG_FILTERS: ngalert.webhook:debug
+      
+      GF_AUTH_DISABLE_LOGIN: true  
+      GF_AUTH_DISABLE_LOGIN_FORM: true  
+      GF_AUTH_ANONYMOUS_ENABLED: true  
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin  
+      GF_SECURITY_DISABLE_BRUTE_FORCE_LOGIN_PROTECTION: true  
+      GF_SECURITY_CONTENT_SECURITY_POLICY: false  
+      GF_SECURITY_X_CONTENT_TYPE_OPTIONS: false  
+      GF_SECURITY_X_XSS_PROTECTION: false  
+      GF_SECURITY_STRICT_TRANSPORT_SECURITY: false
+
+      GF_PLUGIN_ADMIN_ENABLED: true
+      GF_PLUGIN_ADMIN_EXTERNAL_MANAGE_ENABLED: true
+      GF_INSTALL_PLUGINS: yesoreyeram-infinity-datasource,simpod-json-datasource,marcusolsson-json-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./volumes/grafana/provisioning:/etc/grafana/provisioning
+
+    depends_on:
+      - prometheus
+    networks:
+      - default
+
+      
   node-exporter:  
     container_name: supabase-node-exporter  
     image: prom/node-exporter:latest  
     restart: unless-stopped  
     command:  
       - '--path.rootfs=/host'  
+      - '--path.procfs=/host/proc'  
+      - '--path.sysfs=/host/sys'  
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'  
+      - '--collector.systemd'  
+      - '--collector.processes'
+
     pid: host  
     volumes:  
-      - '/:/host:ro,rslave'  
-    #ports:  
-      #- "9100:9100"  
+      # rslave is required to see accurate stats for the host filesystem
+      - '/:/host:ro,rslave' 
+      - '/proc:/host/proc:ro'
+      - '/sys:/host/sys:ro'
+    ports:  
+      - "9100:9100"  
     networks:  
       - default
     healthcheck:
@@ -746,8 +813,8 @@ services:
     container_name: supabase-prometheus  
     image: prom/prometheus:latest  
     restart: unless-stopped  
-    #ports:  
-      #- "9090:9090"  
+    ports:  
+      - "9090:9090"  
     volumes:  
       - ./volumes/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro  
       - prometheus-data:/prometheus  
@@ -804,7 +871,7 @@ services:
       # Initialize the database settings with JWT_SECRET and JWT_EXP
       - ./volumes/db/jwt.sql:/docker-entrypoint-initdb.d/init-scripts/99-jwt.sql:Z
       # PGDATA directory is persisted between restarts
-      - ./volumes/db/data17:/var/lib/postgresql/data:Z
+      - ./volumes/db/data17-2:/var/lib/postgresql/data:Z
       # Changes required for internal supabase data such as _analytics
       - ./volumes/db/_supabase.sql:/docker-entrypoint-initdb.d/migrations/97-_supabase.sql:Z
       # Changes required for Analytics support
@@ -823,6 +890,7 @@ services:
         "-h",
         "localhost"
         ]
+      
       interval: 5s
       timeout: 5s
       retries: 10
@@ -847,7 +915,7 @@ services:
         "-c",
         "log_min_messages=notice" # prevents Realtime polling queries from appearing in logs
       ]
-
+    
   vector:
       container_name: supabase-vector
       image: timberio/vector:0.28.1-alpine
@@ -935,4 +1003,4 @@ services:
 volumes:
   db-config:
   prometheus-data:
-
+  grafana-data:

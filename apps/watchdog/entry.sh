@@ -10,6 +10,9 @@ set -eu
 # Start disk watcher in background (immediate startup alert happens inside the script)
 /app/diskwatch.sh &
 
+# Start Redis listener for on-demand cleanup requests
+/app/redis-listener.sh &
+
 # Trigger an immediate backup on startup
 echo "Running initial backup..."
 if ! /app/backup.sh; then

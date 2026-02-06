@@ -1,8 +1,6 @@
 #!/bin/sh
-set -eu
-set -o pipefail
+set -euo pipefail
 
-# Global trap: catch any uncaught error
 trap 'err=$?; /app/send_telegram.sh "❌ Backup script error (exit $err) at $(date)"' ERR
 
 DOCKER_CONTAINER=${DOCKER_CONTAINER:-supabase-db}
@@ -11,37 +9,41 @@ DATABASE_NAME=${DATABASE_NAME:-postgres}
 
 DATE_DIR=$(date +%Y-%m-%d)
 TIMESTAMP=$(date +"%H-%M-%p")
-BACKUP_FILENAME="supabase-${DATABASE_NAME}-${DATE_DIR}_${TIMESTAMP}.sql.gz"
+BACKUP_FILENAME="supabase-${DATABASE_NAME}-${DATE_DIR}_${TIMESTAMP}.sql"
+BACKUP_GZ="${BACKUP_FILENAME}.gz"
 
 LOCAL_BACKUP_DIR="/app/backup"
-LOCAL_BACKUP_PATH="${LOCAL_BACKUP_DIR}/${BACKUP_FILENAME}"
+LOCAL_BACKUP_PATH="${LOCAL_BACKUP_DIR}/${BACKUP_GZ}"
 
 mkdir -p "${LOCAL_BACKUP_DIR}"
 
-echo "Creating pg_dump..."
-if ! docker exec "${DOCKER_CONTAINER}" \
-    pg_dump -U "${POSTGRES_USER}" --clean --if-exists "${DATABASE_NAME}" \
-    | gzip > "${LOCAL_BACKUP_PATH}"; then
-    /app/send_telegram.sh "❌ Backup failed for ${DATABASE_NAME} at $(date)"
-    exit 1
-fi
+TMPFILE="/tmp/${BACKUP_FILENAME}"
 
-# Sanity check: file must not be empty and must be valid gzip
+echo "Creating pg_dump inside container..."
+docker exec "${DOCKER_CONTAINER}" sh -c "
+  /usr/bin/pg_dump -U ${POSTGRES_USER} --clean --if-exists ${DATABASE_NAME} > ${TMPFILE}
+"
+
+echo "Copying dump out of container..."
+docker cp "${DOCKER_CONTAINER}:${TMPFILE}" "${LOCAL_BACKUP_DIR}/${BACKUP_FILENAME}"
+
+echo "Removing temp file inside container..."
+docker exec "${DOCKER_CONTAINER}" rm -f "${TMPFILE}"
+
+echo "Compressing..."
+gzip -f "${LOCAL_BACKUP_DIR}/${BACKUP_FILENAME}"
+
+# Validate gzip
+gzip -t "${LOCAL_BACKUP_PATH}"
+
+# Validate non-empty
 if [ ! -s "${LOCAL_BACKUP_PATH}" ]; then
-    /app/send_telegram.sh "❌ Backup file is empty, aborting"
-    exit 1
+  /app/send_telegram.sh "❌ Backup file is empty, aborting"
+  exit 1
 fi
 
-if ! gzip -t "${LOCAL_BACKUP_PATH}" 2>/dev/null; then
-    /app/send_telegram.sh "❌ Backup file is corrupted or not valid gzip"
-    exit 1
-fi
-
-echo "Uploading via rclone container..."
-if ! docker exec supabase-rclone rclone --config /config/rclone/rclone.conf \
-    copy "/backup/${BACKUP_FILENAME}" "dropbox:SupabaseServerBackups/${DATE_DIR}"; then
-    /app/send_telegram.sh "⚠️ Upload failed for ${LOCAL_BACKUP_PATH}"
-    exit 1
-fi
+echo "Uploading via rclone..."
+docker exec supabase-rclone rclone --config /config/rclone/rclone.conf \
+  copy "/backup/${BACKUP_GZ}" "dropbox:SupabaseServerBackups/${DATE_DIR}"
 
 /app/send_telegram.sh "✅ Backup complete: ${LOCAL_BACKUP_PATH}"

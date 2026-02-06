@@ -1,0 +1,11 @@
+apiVersion: 1  
+datasources:  
+  - name: Logflare  
+    type: yesoreyeram-infinity-datasource  
+    access: proxy  
+    url: http://analytics:4000  
+    isDefault: false  
+    jsonData:  
+      httpHeaderName1: 'x-api-key'  
+    secureJsonData:  
+      httpHeaderValue1: 'your-super-secret-and-long-logflare-key-private'
