@@ -13,6 +13,9 @@ set -eu
 # Start Redis listener for on-demand cleanup requests
 /app/redis-listener.sh &
 
+# Start PGMQ worker to forward DB events to Telegram
+/app/pgmq-worker.sh &
+
 # Trigger an immediate backup on startup
 echo "Running initial backup..."
 if ! /app/backup.sh; then
