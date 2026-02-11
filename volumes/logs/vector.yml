@@ -37,6 +37,7 @@ transforms:
       storage: '.appname == "supabase-storage"'
       functions: '.appname == "supabase-functions"'
       db: '.appname == "supabase-db"'
+
   # Ignores non nginx errors since they are related with kong booting up
   kong_logs:
     type: remap
@@ -101,7 +102,7 @@ transforms:
       parsed, err = parse_regex(.event_message, r'^(?P<time>.*): (?P<msg>.*)$')
       if err == null {
           .event_message = parsed.msg
-          .timestamp = to_timestamp!(parsed.time)
+          .timestamp = parse_timestamp!(parsed.time, "%s")  
           .metadata.host = .project
       }
   # Realtime logs are structured so we parse the severity level using regex (ignore time because it has no date)
@@ -153,7 +154,9 @@ transforms:
       if .metadata.parsed.error_severity == "info" {
           .metadata.parsed.error_severity = "log"
       }
-      .metadata.parsed.error_severity = upcase!(.metadata.parsed.error_severity)
+      if .metadata.parsed.error_severity != null {  
+        .metadata.parsed.error_severity = upcase!(.metadata.parsed.error_severity)  
+      }
 
 sinks:
   logflare_auth:

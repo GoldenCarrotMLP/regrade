@@ -400,6 +400,11 @@ services:
       KONG_REAL_IP_RECURSIVE: "on" # Ensures Kong forwards the proto + host to Supabase Auth 
       KONG_HEADERS_UPSTREAM: X-Forwarded-Proto, X-Forwarded-Host, X-Forwarded-For
 
+      KONG_NGINX_PROXY_REAL_IP_HEADER: X-Forwarded-For  
+      KONG_NGINX_PROXY_REAL_IP_RECURSIVE: on  
+      KONG_NGINX_PROXY_SET_REAL_IP_FROM: 192.168.1.251 172.18.0.1 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+
+
     # https://unix.stackexchange.com/a/294837
     entrypoint: bash -c 'eval "echo \"$$(cat ~/temp.yml)\"" > ~/kong.yml && /docker-entrypoint.sh kong docker-start'
     healthcheck:
@@ -918,7 +923,8 @@ services:
     
   vector:
       container_name: supabase-vector
-      image: timberio/vector:0.28.1-alpine
+      #image: timberio/vector:0.28.1-alpine
+      image: timberio/vector:nightly-alpine
       restart: unless-stopped
       volumes:
         - ./volumes/logs/vector.yml:/etc/vector/vector.yml:ro,z
