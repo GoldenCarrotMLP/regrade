@@ -16,6 +16,9 @@ set -eu
 # Start PGMQ worker to forward DB events to Telegram
 /app/pgmq-worker.sh &
 
+# Start telegram worker
+/app/telegram_worker.sh &
+
 # Trigger an immediate backup on startup
 echo "Running initial backup..."
 if ! /app/backup.sh; then

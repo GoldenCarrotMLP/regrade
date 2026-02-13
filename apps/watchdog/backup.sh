@@ -1,7 +1,7 @@
 #!/bin/sh
 set -euo pipefail
 
-trap 'err=$?; /app/send_telegram.sh "❌ Backup script error (exit $err) at $(date)"' ERR
+trap 'err=$?; /app/send_telegram.sh "?? Backup script error (exit $err) at $(date)"' ERR
 
 DOCKER_CONTAINER=${DOCKER_CONTAINER:-supabase-db}
 POSTGRES_USER=${POSTGRES_USER:-supabase_admin}
@@ -14,6 +14,7 @@ BACKUP_GZ="${BACKUP_FILENAME}.gz"
 
 LOCAL_BACKUP_DIR="/app/backup"
 LOCAL_BACKUP_PATH="${LOCAL_BACKUP_DIR}/${BACKUP_GZ}"
+REMOTE_PATH="dropbox:SupabaseServerBackups/${DATE_DIR}"
 
 mkdir -p "${LOCAL_BACKUP_DIR}"
 
@@ -38,12 +39,40 @@ gzip -t "${LOCAL_BACKUP_PATH}"
 
 # Validate non-empty
 if [ ! -s "${LOCAL_BACKUP_PATH}" ]; then
-  /app/send_telegram.sh "❌ Backup file is empty, aborting"
+  /app/send_telegram.sh "? Backup file is empty, aborting"
   exit 1
 fi
 
 echo "Uploading via rclone..."
 docker exec supabase-rclone rclone --config /config/rclone/rclone.conf \
-  copy "/backup/${BACKUP_GZ}" "dropbox:SupabaseServerBackups/${DATE_DIR}"
+  copy "/backup/${BACKUP_GZ}" "${REMOTE_PATH}"
 
-/app/send_telegram.sh "✅ Backup complete: ${LOCAL_BACKUP_PATH}"
+# --- VERIFICATION PHASE ---
+echo "Verifying upload..."
+
+MAX_RETRIES=3
+VERIFIED=0
+
+for i in $(seq 1 $MAX_RETRIES); do
+  # Check if specific file exists on remote
+  # rclone lsf returns the filename if it exists, nothing if not
+  CHECK=$(docker exec supabase-rclone rclone --config /config/rclone/rclone.conf \
+    lsf "${REMOTE_PATH}/${BACKUP_GZ}" || true)
+
+  if [ "$CHECK" = "$BACKUP_GZ" ]; then
+    echo "Verification successful."
+    VERIFIED=1
+    break
+  fi
+
+  echo "Verification attempt $i/$MAX_RETRIES failed. Retrying in 10s..."
+  sleep 10
+done
+
+if [ "$VERIFIED" -eq 0 ]; then
+  /app/send_telegram.sh "??? Backup upload FAILED verification after $MAX_RETRIES attempts. File: $BACKUP_GZ"
+  exit 1
+fi
+
+# Success is now silent (no telegram message)
+echo "Backup pipeline finished successfully."
