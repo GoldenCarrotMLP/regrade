@@ -1,2 +1,7 @@
 0,30 14-23 * * 1-5 /app/backup.sh >> /app/backup/cron.log 2>&1
 0 0 * * 2-6 /app/backup.sh >> /app/backup/cron.log 2>&1
+# Daily base backup at 00:01 UTC
+1 0 * * * /app/pitr_daily_base.sh >> /app/pitr/logs/base.log 2>&1
+
+# Daily WAL archive at 23:59 UTC
+59 23 * * * /app/pitr_archive_yesterday.sh >> /app/pitr/logs/archive.log 2>&1

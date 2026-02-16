@@ -19,6 +19,9 @@ set -eu
 # Start telegram worker
 /app/telegram_worker.sh &
 
+# Start PITR WAL uploader to continuously upload WAL files
+/app/pitr_wal_uploader.sh &
+
 # Trigger an immediate backup on startup
 echo "Running initial backup..."
 if ! /app/backup.sh; then

@@ -10,6 +10,7 @@ services:
       - ${DOCKER_SOCKET_LOCATION}:/var/run/docker.sock:ro
       - ./backup:/app/backup
       - ./volumes/watchdog:/app/log/
+      - ./volumes/db/pitr_wal:/wal_archive
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
@@ -35,6 +36,7 @@ services:
     volumes:
       - ./volumes/rclone:/config/rclone
       - ./backup:/backup
+      - ./volumes/db/pitr_wal:/wal_archive
 
     command: tail -f /dev/null   # keep container running
     healthcheck:
@@ -883,6 +885,9 @@ services:
       - ./volumes/db/pooler.sql:/docker-entrypoint-initdb.d/migrations/99-pooler.sql:Z
       # Use named volume to persist pgsodium decryption key between restarts
       - db-config:/etc/postgresql-custom-new
+      - ./volumes/db/99-custom-config.sql:/docker-entrypoint-initdb.d/init-scripts/99-custom-config.sql:Z
+      - ./volumes/db/pitr_wal:/var/lib/postgresql/data/wal_archive
+
     healthcheck:
       test:
         [
