@@ -11,6 +11,7 @@ services:
       - ./backup:/app/backup
       - ./volumes/watchdog:/app/log/
       - ./volumes/db/pitr_wal:/wal_archive
+      - ./volumes/db/pitr_workspace:/app/pitr 
     environment:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID}
@@ -37,7 +38,7 @@ services:
       - ./volumes/rclone:/config/rclone
       - ./backup:/backup
       - ./volumes/db/pitr_wal:/wal_archive
-
+      - ./volumes/db/pitr_workspace:/app/pitr 
     command: tail -f /dev/null   # keep container running
     healthcheck:
       test: ["CMD", "true"]

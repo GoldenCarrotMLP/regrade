@@ -1,12 +1,21 @@
-FROM alpine:latest
+FROM golang:1.24-bookworm AS builder
+WORKDIR /app
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+COPY . .
+RUN go mod tidy
+RUN CGO_ENABLED=0 GOOS=linux go build -o watchdog ./cmd/watchdog/main.go
 
-RUN apk add --no-cache curl dcron docker-cli redis inotify-tools
+FROM alpine:latest
+RUN apk add --no-cache docker-cli rclone gzip redis
 
 WORKDIR /app
+# Create directories for volumes
+RUN mkdir -p /app/backup /app/pitr /wal_archive
 
-COPY backup.sh healthcheck.sh send_telegram.sh diskwatch.sh entry.sh logwatch.sh free_disk_space.sh telegram_worker.sh redis-listener.sh pgmq-worker.sh pitr_archive_yesterday.sh pitr_daily_base.sh pitr_wal_uploader.sh /app/
-COPY cron.d/watchdog /etc/cron.d/watchdog
+COPY --from=builder /app/watchdog .
+COPY *.sh /app/legacy_scripts/
 
-RUN chmod +x /app/*.sh && chmod 0644 /etc/cron.d/watchdog
+# The uploader expects scripts in legacy_scripts/ based on our tasks code
+RUN chmod +x /app/watchdog /app/legacy_scripts/*.sh
 
-CMD ["/app/entry.sh"]
+CMD ["./watchdog"]

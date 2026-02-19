@@ -1,0 +1,14 @@
+{
+  "date": "2026-02-17",
+  "base_backup": "base.tar.gz",
+  "base_backup_timestamp": "0001-01-01T00:00:00Z",
+  "timeline": 0,
+  "wal_start_segment": "",
+  "wal_end_segment": "",
+  "wal_start_timestamp": "0001-01-01T00:00:00Z",
+  "wal_end_timestamp": "0001-01-01T00:00:00Z",
+  "continuous": true,
+  "missing_segments": [],
+  "valid_until": "0001-01-01T00:00:00Z",
+  "is_archived": true
+}
