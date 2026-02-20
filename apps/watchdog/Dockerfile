@@ -13,7 +13,7 @@ WORKDIR /app
 RUN mkdir -p /app/backup /app/pitr /wal_archive
 
 COPY --from=builder /app/watchdog .
-COPY *.sh /app/legacy_scripts/
+COPY legacy_scripts/*.sh /app/legacy_scripts/
 
 # The uploader expects scripts in legacy_scripts/ based on our tasks code
 RUN chmod +x /app/watchdog /app/legacy_scripts/*.sh
